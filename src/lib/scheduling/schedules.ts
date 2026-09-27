@@ -5,9 +5,9 @@ import { dayMs, localParts, localTimeToUtc } from "./time";
 type ScheduleSettings = Pick<Config, "timeZone" | "schedule">;
 type PublishSettings = Pick<Config, "timeZone" | "publishHour">;
 
-// The id predates postpilot's name. Keeping it lets an existing deployment update its
-// live QStash schedule in place instead of gaining a second one.
-export const runScheduleId = "linkedin-automation-morning";
+// Creating a schedule with this id again overwrites it in place, so a deployment only
+// ever holds one.
+export const runScheduleId = "postpilot-run";
 
 export function runCron({ timeZone, schedule }: ScheduleSettings = config()) {
   const days = [...new Set(schedule.days)].map((day) => weekdays.indexOf(day)).sort((a, b) => a - b);

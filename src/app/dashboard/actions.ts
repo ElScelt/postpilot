@@ -28,7 +28,7 @@ export async function runNow(): Promise<ActionResult> {
       url: automationUrl(),
       body: {},
       retries: 0,
-      label: "linkedin-automation-manual",
+      label: "postpilot-run-manual",
     });
     revalidatePath("/dashboard");
     return { ok: true, message: `Run queued (QStash message ${result.messageId}). The draft or the reason arrives on ntfy in a minute or two.` };

@@ -20,7 +20,7 @@ export type AutomationRun = {
   durationMs?: number;
 };
 
-const runsKey = "linkedin:automation-runs";
+const runsKey = "postpilot:runs";
 const retainedRuns = 60;
 
 export async function listAutomationRuns(client: KeyValueStore = redis()): Promise<AutomationRun[]> {

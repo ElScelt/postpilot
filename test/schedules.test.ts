@@ -26,13 +26,13 @@ test("runs on the configured evenings in the configured time zone", () => {
 
 test("sends the schedule a real JSON payload without a copied bearer secret", () => {
   assert.deepEqual(scheduleRequest("https://example.com/api/automation/run", tallinn), {
-    scheduleId: "linkedin-automation-morning",
+    scheduleId: "postpilot-run",
     destination: "https://example.com/api/automation/run",
     cron: "CRON_TZ=Europe/Tallinn 0 21 * * 0,2,4",
     body: "{}",
     headers: { "Content-Type": "application/json" },
     retries: 3,
-    label: "linkedin-automation-morning",
+    label: "postpilot-run",
   });
 });
 
@@ -59,7 +59,7 @@ const destination = "https://example.com/api/automation/run";
 
 test("reconcile rewrites a live schedule whose cron drifted from the code", async () => {
   const { client, created } = fakeClient({
-    "linkedin-automation-morning": { cron: "CRON_TZ=Europe/Tallinn 0 21 * * 0-4", destination },
+    "postpilot-run": { cron: "CRON_TZ=Europe/Tallinn 0 21 * * 0-4", destination },
   });
   const changed = await reconcileAutomationSchedules(client, destination, { settings: tallinn });
   assert.deepEqual(created.map((request) => request.cron), ["CRON_TZ=Europe/Tallinn 0 21 * * 0,2,4"]);
@@ -68,7 +68,7 @@ test("reconcile rewrites a live schedule whose cron drifted from the code", asyn
 
 test("reconcile leaves a matching schedule untouched", async () => {
   const { client, created } = fakeClient({
-    "linkedin-automation-morning": { cron: "CRON_TZ=Europe/Tallinn 0 21 * * 0,2,4", destination },
+    "postpilot-run": { cron: "CRON_TZ=Europe/Tallinn 0 21 * * 0,2,4", destination },
   });
   assert.deepEqual(await reconcileAutomationSchedules(client, destination, { settings: tallinn }), []);
   assert.deepEqual(created, []);
@@ -76,7 +76,7 @@ test("reconcile leaves a matching schedule untouched", async () => {
 
 test("reconcile ignores whitespace QStash may have normalised away", async () => {
   const { client, created } = fakeClient({
-    "linkedin-automation-morning": { cron: "CRON_TZ=Europe/Tallinn  0 21 * * 0,2,4 ", destination },
+    "postpilot-run": { cron: "CRON_TZ=Europe/Tallinn  0 21 * * 0,2,4 ", destination },
   });
   assert.deepEqual(await reconcileAutomationSchedules(client, destination, { settings: tallinn }), []);
   assert.deepEqual(created, []);
@@ -91,7 +91,7 @@ test("reconcile creates the schedule when none exists", async () => {
 
 test("reconcile rewrites a schedule pointing at a stale destination", async () => {
   const { client, created } = fakeClient({
-    "linkedin-automation-morning": { cron: "CRON_TZ=Europe/Tallinn 0 21 * * 0,2,4", destination: "https://old.example.com/api/automation/run" },
+    "postpilot-run": { cron: "CRON_TZ=Europe/Tallinn 0 21 * * 0,2,4", destination: "https://old.example.com/api/automation/run" },
   });
   await reconcileAutomationSchedules(client, destination, { settings: tallinn });
   assert.equal(created.length, 1);
@@ -99,7 +99,7 @@ test("reconcile rewrites a schedule pointing at a stale destination", async () =
 
 test("a manual run never repoints a live schedule at its own host", async () => {
   const { client, created } = fakeClient({
-    "linkedin-automation-morning": { cron: "CRON_TZ=Europe/Tallinn 0 21 * * 0,2,4", destination },
+    "postpilot-run": { cron: "CRON_TZ=Europe/Tallinn 0 21 * * 0,2,4", destination },
   });
   const changed = await reconcileAutomationSchedules(client, "http://localhost:3000/api/automation/run", { manual: true, settings: tallinn });
   assert.deepEqual(created, []);
@@ -124,9 +124,9 @@ test("predicts the next firing from the configured schedule", () => {
 
 test("describes the live schedule for the dashboard without changing it", async () => {
   const cron = "CRON_TZ=UTC 0 21 * * 0,2,4";
-  const { client, created } = fakeClient({ "linkedin-automation-morning": { cron, destination } });
-  assert.deepEqual(await describeLiveSchedule(client), { id: "linkedin-automation-morning", cron, live: { cron, destination } });
-  assert.deepEqual(await describeLiveSchedule(fakeClient({}).client), { id: "linkedin-automation-morning", cron, live: undefined });
+  const { client, created } = fakeClient({ "postpilot-run": { cron, destination } });
+  assert.deepEqual(await describeLiveSchedule(client), { id: "postpilot-run", cron, live: { cron, destination } });
+  assert.deepEqual(await describeLiveSchedule(fakeClient({}).client), { id: "postpilot-run", cron, live: undefined });
   assert.deepEqual(created, []);
 });
 

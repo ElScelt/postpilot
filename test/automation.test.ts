@@ -133,7 +133,10 @@ test("nags from ten days before the authorization expires", async () => {
 
 test("refuses to run while another run holds the lock for the same morning", async () => {
   const { deps, calls } = fakes({ locked: true });
+  const lockKeys: string[] = [];
+  deps.acquireRunLock = async (key) => { lockKeys.push(key); return false; };
   const result = await runAutomation(now, deps);
+  assert.deepEqual(lockKeys, ["postpilot:run-lock:2026-09-07"]);
   assert.equal(result.status, "skipped");
   assert.match(result.reason, /already in progress/);
   assert.equal(calls.drafted.length, 0);

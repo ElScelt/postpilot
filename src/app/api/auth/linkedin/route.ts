@@ -12,6 +12,6 @@ export async function GET() {
     scope: "openid profile w_member_social",
   });
   const response = NextResponse.redirect(`https://www.linkedin.com/oauth/v2/authorization?${params}`);
-  response.cookies.set("linkedin_oauth_state", state, { httpOnly: true, secure: true, sameSite: "lax", maxAge: 600, path: "/" });
+  response.cookies.set("postpilot_oauth_state", state, { httpOnly: true, secure: true, sameSite: "lax", maxAge: 600, path: "/" });
   return response;
 }
