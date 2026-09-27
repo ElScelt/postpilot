@@ -168,6 +168,17 @@ async function draftFromTheme(
   return { decision: { shouldPost: false, reason: feedback }, rejected: new DraftRejectedError(feedback, attempts, theme) };
 }
 
+// Like the draft, an empty or malformed strict-JSON review is usually the reasoning
+// spending the whole completion budget, so it is asked once more with low effort.
+async function requestReview(draft: PostedDecision, results: ResearchResult[], now: Date, fetcher: typeof fetch) {
+  try {
+    return await completeGroq(buildReviewRequest(draft, results, now), "review", fetcher);
+  } catch (error) {
+    if (!(error instanceof GroqInvalidJsonError)) throw error;
+    return completeGroq(buildReviewRequest(draft, results, now, "low"), "review", fetcher);
+  }
+}
+
 // A validated draft is read once more against its evidence and any claim that goes
 // beyond it is pulled back. The review can decline the story outright, which counts as
 // the theme declining; a review that fails, cannot be parsed or breaks a rule is dropped
@@ -182,7 +193,7 @@ async function reviewDraft(
 ): Promise<DraftDecision> {
   let text: string;
   try {
-    text = await completeGroq(buildReviewRequest(draft, results, now), "review", fetcher);
+    text = await requestReview(draft, results, now, fetcher);
   } catch (error) {
     notes.push(`Review pass skipped: ${errorMessage(error)}`);
     return draft;
