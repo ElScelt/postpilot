@@ -8,7 +8,7 @@ export type TokenStatus =
   | { state: "missing" }
   | { state: "expired" | "valid"; daysRemaining: number };
 
-const tokenKey = "linkedin:token";
+const tokenKey = "postpilot:token";
 
 // LinkedIn supports each YYYYMM version for at least a year and then answers 426
 // NONEXISTENT_VERSION. The newest version comes first; when LinkedIn rejects it the

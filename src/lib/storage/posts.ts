@@ -32,7 +32,7 @@ export type PostStoreDeps = {
   publisher?: Pick<ReturnType<typeof qstash>, "publishJSON">;
 };
 
-const queueKey = "linkedin:posts";
+const queueKey = "postpilot:posts";
 
 // Everything queued stays; the terminal history is capped so the single key never grows
 // toward Upstash's request limit. LinkedIn itself is the archive of what went out.
@@ -93,7 +93,7 @@ export async function schedulePost(text: string, scheduledFor: string, automatio
       body: { postId: post.id },
       notBefore: deliveryTimestamp(scheduledFor),
       retries: 3,
-      label: ["linkedin-post", post.id],
+      label: ["postpilot-publish", post.id],
       redact: { body: true },
       // The SDK re-sends a publish whose response was lost; without this id that is a
       // second delivery for the same post at 09:00.

@@ -28,3 +28,7 @@ First public release.
   - Run now, Reject and Edit.
 - `postpilot.config.ts`: typed, validated configuration for time zone, publish hour, schedule, persona, word and hook limits, source window and themes, with documented defaults.
 - `npm run draft -- --offline` to run the drafting pipeline on canned data, with no keys or network.
+- Every named resource uses the `postpilot` prefix:
+  - Redis keys (`postpilot:token`, `postpilot:posts`, `postpilot:runs`, `postpilot:run-lock:<date>`);
+  - the QStash schedule id (`postpilot-run`) and message labels;
+  - the OAuth state cookie.

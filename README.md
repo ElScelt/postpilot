@@ -222,7 +222,7 @@ The validator enforces these rules instead of trusting the prompt to follow them
 
 ### Storage keys
 
-The Redis keys are `linkedin:token`, `linkedin:posts`, `linkedin:automation-runs` and `linkedin:automation-lock:<date>`, and the QStash schedule id is `linkedin-automation-morning`. These names come from the project's earlier life and are kept so an existing deployment upgrades without a migration. Give each deployment its own Redis database.
+postpilot keeps everything in Redis under the `postpilot:` prefix: `postpilot:token`, `postpilot:posts`, `postpilot:runs` and a short-lived `postpilot:run-lock:<date>`. The QStash schedule id is `postpilot-run`. Give each deployment its own Redis database and QStash instance.
 
 ## FAQ
 

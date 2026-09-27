@@ -64,7 +64,7 @@ export async function runAutomation(
   // Two runs for the same morning (a manual test landing during the scheduled firing)
   // would each pass the duplicate check below against a stale snapshot and queue two
   // posts. The lock is released at the end so a retry after a failure can still run.
-  const lockKey = `linkedin:automation-lock:${scheduledFor.toISOString().slice(0, 10)}`;
+  const lockKey = `postpilot:run-lock:${scheduledFor.toISOString().slice(0, 10)}`;
   if (!(await deps.acquireRunLock(lockKey, lockTtlSeconds))) {
     const reason = "Another automation run for this morning is already in progress.";
     await deps.recordAutomationRun({ ranAt, status: "skipped", reason });

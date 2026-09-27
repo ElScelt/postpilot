@@ -11,7 +11,7 @@ const profileSchema = z.object({ sub: z.string().min(1) });
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code");
   const state = request.nextUrl.searchParams.get("state");
-  if (!code || !validState(state) || state !== request.cookies.get("linkedin_oauth_state")?.value) {
+  if (!code || !validState(state) || state !== request.cookies.get("postpilot_oauth_state")?.value) {
     return new NextResponse("Invalid or expired OAuth state. Start again from /api/auth/linkedin.", { status: 400 });
   }
   const body = new URLSearchParams({
@@ -46,6 +46,6 @@ export async function GET(request: NextRequest) {
     `LinkedIn connected as member ${profile.sub}. The authorization expires on ${formatDay(expiresAt)}; `
     + "reconnect before then. You can close this tab.",
   );
-  response.cookies.delete("linkedin_oauth_state");
+  response.cookies.delete("postpilot_oauth_state");
   return response;
 }

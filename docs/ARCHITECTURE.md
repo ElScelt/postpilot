@@ -115,4 +115,4 @@ docs/                        this file and README images
 - **Config vs environment.** `postpilot.config.ts` holds behaviour, and environment variables hold secrets and infrastructure. Functions that depend on config take the relevant slice as a defaulted parameter (`settings = config()`), so tests pass their own.
 - **Injected services.** Network and storage are default parameters too (`fetcher = fetch`, `client = redis()`). Tests never touch the network.
 - **Time zones.** Local-to-UTC conversion goes through `Intl.DateTimeFormat` in `scheduling/time.ts`, which handles daylight saving time. QStash crons carry `CRON_TZ`.
-- **Storage keys** keep their `linkedin:` prefix from earlier versions (see the README).
+- **Named resources** all start with `postpilot`: Redis keys (`postpilot:*`), the QStash schedule id and message labels, and the OAuth state cookie.
