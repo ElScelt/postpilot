@@ -1,0 +1,30 @@
+# dependencies
+node_modules/
+
+# build output
+.next/
+out/
+build/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+
+# environment files: secrets never go in git
+.env*
+!.env.example
+
+# deployment
+.vercel/
+
+# logs
+*.log
+npm-debug.log*
+
+# OS and editor junk
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+*~

@@ -1,0 +1,60 @@
+{
+  "name": "postpilot",
+  "version": "1.0.0",
+  "description": "Self-hosted autopilot for LinkedIn posts: researches recent sources, drafts a grounded post overnight, and publishes it in the morning unless you reject it from your phone.",
+  "private": true,
+  "license": "MIT",
+  "author": "Edgar Raudsepp",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ElScelt/postpilot.git"
+  },
+  "homepage": "https://github.com/ElScelt/postpilot#readme",
+  "bugs": {
+    "url": "https://github.com/ElScelt/postpilot/issues"
+  },
+  "keywords": [
+    "linkedin",
+    "nextjs",
+    "vercel",
+    "qstash",
+    "groq",
+    "tavily",
+    "ntfy",
+    "automation"
+  ],
+  "engines": {
+    "node": ">=22.9.0"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test \"test/*.test.ts\"",
+    "test:coverage": "tsx --test --experimental-test-coverage --test-coverage-exclude=\"test/**\" \"test/*.test.ts\"",
+    "draft": "node --env-file-if-exists=.env.local --import tsx scripts/draft.ts"
+  },
+  "overrides": {
+    "postcss": "8.5.24",
+    "sharp": "0.35.4"
+  },
+  "dependencies": {
+    "@upstash/qstash": "2.11.3",
+    "@upstash/redis": "1.38.3",
+    "next": "16.3.4",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.3",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.5",
+    "eslint": "9.39.5",
+    "eslint-config-next": "16.3.4",
+    "tsx": "4.23.13",
+    "typescript": "5.9.3"
+  }
+}
