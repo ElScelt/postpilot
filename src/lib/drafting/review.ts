@@ -43,11 +43,15 @@ ${draftAsJson(draft)}
 </draft>`;
 }
 
-export function buildReviewRequest(draft: PostedDecision, results: ResearchResult[], now: Date): RequestInit {
+export function buildReviewRequest(
+  draft: PostedDecision, results: ResearchResult[], now: Date, reasoning: "low" | "medium" = "medium",
+): RequestInit {
   return groqRequest({
     prompt: reviewPrompt(draft, results, now),
-    reasoning: "medium",
-    maxTokens: 2500,
+    reasoning,
+    // The draft's budget: at 2,500 medium reasoning used it all before the JSON on the
+    // first live run, and every review was skipped.
+    maxTokens: 3000,
     responseFormat: draftResponseFormat(),
   });
 }

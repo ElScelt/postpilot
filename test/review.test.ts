@@ -31,5 +31,5 @@ test("the review sees the hard rules, the evidence and the draft, and answers in
   assert.match(prompt, /<draft>\n\{"shouldPost":true/);
   const body = JSON.parse(String(buildReviewRequest(draft, evidence, new Date()).body));
   assert.equal(body.response_format.type, "json_schema");
-  assert.equal(body.max_completion_tokens, 2500);
+  assert.equal(body.max_completion_tokens, 3000);
 });

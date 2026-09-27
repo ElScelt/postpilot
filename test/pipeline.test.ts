@@ -36,6 +36,7 @@ function fakeFetch(tavily: (theme: PostTheme) => unknown[], groqAnswers: string[
   const groqBodies: string[] = [];
   const groqRequests: Array<{ reasoning_effort: string; max_completion_tokens: number }> = [];
   const reviewBodies: string[] = [];
+  const reviewRequests: Array<{ reasoning_effort: string; max_completion_tokens: number }> = [];
   const themesSearched: PostTheme[] = [];
   const answerWith = (answer: string) => {
     if (answer === "__413__") return new Response("Request too large for model", { status: 413 });
@@ -57,6 +58,7 @@ function fakeFetch(tavily: (theme: PostTheme) => unknown[], groqAnswers: string[
     // for it; otherwise the draft embedded in the prompt is echoed back unchanged.
     if (content.startsWith("Review a LinkedIn post")) {
       reviewBodies.push(content);
+      reviewRequests.push(body);
       const marked = groqAnswers[0]?.startsWith("__review__:") ? groqAnswers.shift()!.slice("__review__:".length) : undefined;
       return answerWith(marked ?? content.match(/<draft>\n([\s\S]*)\n<\/draft>/)![1]!);
     }
@@ -66,7 +68,7 @@ function fakeFetch(tavily: (theme: PostTheme) => unknown[], groqAnswers: string[
     if (answer === undefined) throw new Error("Groq called more often than expected");
     return answerWith(answer);
   };
-  return { fetcher, groqBodies, groqRequests, reviewBodies, themesSearched };
+  return { fetcher, groqBodies, groqRequests, reviewBodies, reviewRequests, themesSearched };
 }
 
 test("feeds every validation failure back and accepts the corrected second draft", async () => {
@@ -270,8 +272,18 @@ test("a review rewrite that breaks a rule is dropped and the validated draft shi
 });
 
 test("a failing review call never costs the night", async () => {
-  const { fetcher } = fakeFetch(() => [primary], [decisionJson(), "__review__:__400json__"]);
+  const { fetcher, reviewRequests } = fakeFetch(() => [primary], [decisionJson(), "__review__:__400json__", "__review__:__400json__"]);
   const outcome = await generateGroundedDraft(noRecent, now, fetcher);
   assert.equal(postedText(outcome).startsWith(hook), true);
   assert.match(outcome.notes?.[0] ?? "", /Review pass skipped/);
+  assert.equal(reviewRequests.length, 2);
+});
+
+test("an empty strict-JSON review is retried once with low reasoning effort", async () => {
+  const { fetcher, reviewRequests } = fakeFetch(() => [primary], [decisionJson(), "__review__:__400json__"]);
+  const outcome = await generateGroundedDraft(noRecent, now, fetcher);
+  assert.equal(postedText(outcome).startsWith(hook), true);
+  assert.deepEqual(outcome.notes, []);
+  assert.deepEqual(reviewRequests.map((request) => request.reasoning_effort), ["medium", "low"]);
+  assert.deepEqual(reviewRequests.map((request) => request.max_completion_tokens), [3000, 3000]);
 });
