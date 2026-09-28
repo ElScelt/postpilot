@@ -1,9 +1,9 @@
 import { draftViolations } from "./rules";
 import type { DraftContext } from "./types";
-import { draftJsonProblem, parseDraftDecision, repairDraftJson, type DraftDecision } from "./decision";
+import { draftJsonProblem, parseDraftDecision, repairedAnswer, type DraftDecision } from "./decision";
 import { completeGroq, GroqInvalidJsonError } from "./groq";
 import { buildDraftRequest, type RecentActivity } from "./prompt";
-import { buildReviewRequest, type PostedDecision } from "./review";
+import { reviewDraft } from "./review";
 import { searchThemeEvidence, type ResearchResult } from "../research/tavily";
 import { focusEvidence, meetsEvidenceBar } from "../research/sources";
 import { themeOrder, type PostTheme } from "../research/themes";
@@ -84,7 +84,7 @@ export async function generateGroundedDraft(
   const attempts: DraftAttempt[] = [];
   const notes: string[] = [];
   const declined: string[] = [];
-  let rejected: DraftRejectedError | undefined;
+  let rejected: { reason: string; theme: PostTheme } | undefined;
   let drafted = 0;
   let lastTheme: PostTheme | undefined;
   for (const theme of themeOrder(recent.themes, now)) {
@@ -97,12 +97,14 @@ export async function generateGroundedDraft(
     // If the whole evidence set cannot clear the bar, no draft drawn from it can either.
     if (!meetsEvidenceBar(results.map((result) => result.url))) continue;
     drafted += 1;
-    const outcome = await draftFromTheme(recent, results, theme, now, bounded, deadline, attempts, notes);
+    const outcome = await draftFromTheme(recent, results, theme, now, bounded, deadline);
+    attempts.push(...outcome.attempts);
+    notes.push(...outcome.notes);
     if (outcome.decision.shouldPost) return { decision: outcome.decision, theme, themesTried, evidenceHosts, attempts, notes };
-    if (outcome.rejected) rejected = outcome.rejected;
+    if (outcome.rejected) rejected = { reason: outcome.decision.reason, theme };
     else declined.push(`${theme}: ${outcome.decision.reason}`);
   }
-  if (rejected) throw new DraftRejectedError(rejected.message, attempts, rejected.theme);
+  if (rejected) throw new DraftRejectedError(rejected.reason, attempts, rejected.theme);
   const reason = declined.length
     ? `No theme had a story worth posting (${declined.join("; ")}).`
     : themesTried.length && Object.values(evidenceHosts).some((hosts) => hosts.length)
@@ -110,6 +112,14 @@ export async function generateGroundedDraft(
       : `No dated recent evidence found (tried ${themesTried.join(", ")}).`;
   return { decision: { shouldPost: false, reason }, theme: lastTheme, themesTried, evidenceHosts, attempts, notes };
 }
+
+type ThemeOutcome = {
+  decision: DraftDecision;
+  // Both drafts broke a rule; the decision's reason is the last rejection.
+  rejected: boolean;
+  attempts: DraftAttempt[];
+  notes: string[];
+};
 
 // Two drafts from one theme's evidence: the second hears every rule the first broke.
 async function draftFromTheme(
@@ -119,9 +129,7 @@ async function draftFromTheme(
   now: Date,
   fetcher: typeof fetch,
   deadline: number,
-  attempts: DraftAttempt[],
-  notes: string[],
-): Promise<{ decision: DraftDecision; rejected?: DraftRejectedError }> {
+): Promise<ThemeOutcome> {
   const focused = focusEvidence(results);
   const evidence = focused.map((result) =>
     [result.title, result.url, result.publishedDate, result.content].join("\n"));
@@ -130,67 +138,90 @@ async function draftFromTheme(
     recentThemes: recent.previousTheme ? [recent.previousTheme] : [],
     evidence,
   };
+  const attempts: DraftAttempt[] = [];
   let feedback = "";
   let failedDraft = "";
-  let compact = false;
-  let reasoning: "medium" | "low" = "medium";
+  let form: RequestForm = { compact: false, reasoning: "medium" };
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    let text: string;
-    try {
-      text = await completeGroq(
-        buildDraftRequest({ recent, results: focused, now, theme, feedback, failedDraft, compact, reasoning }), "draft", fetcher, sleep, deadline,
-      );
-    } catch (error) {
-      const repaired = repairedAnswer(error);
-      if (repaired !== undefined) {
-        text = repaired;
-      } else if (error instanceof GroqInvalidJsonError) {
-        // An empty or cut-off answer in strict JSON mode is usually the reasoning
-        // spending the whole completion budget, so it is repeated once with low
-        // reasoning effort. Complete JSON in the wrong shape would not improve with less
-        // thinking; it, and a second failure of any kind, is fed back like an invalid draft.
-        if (reasoning === "medium" && !parsesAsJson(error.failedGeneration)) {
-          reasoning = "low";
-          attempt -= 1;
-          continue;
-        }
-        feedback = draftJsonProblem(error.failedGeneration);
-        // The malformed answer itself is not shown again: on a live run the model
-        // copied its nested shape straight back.
-        failedDraft = "";
-        attempts.push({ text: error.failedGeneration, reason: feedback });
-        continue;
-      } else {
-        // The free tier's per-minute token budget is shared by prompt and answer. When
-        // Groq refuses the request as too large, the same attempt is repeated once with
-        // fewer, shorter excerpts instead of losing the night.
-        if (compact || !(error instanceof Error) || !/too large/.test(error.message)) throw error;
-        compact = true;
-        attempt -= 1;
-        continue;
-      }
+    const answer = await requestDraft(
+      (request) => buildDraftRequest({ recent, results: focused, now, theme, feedback, failedDraft, ...request }), form, fetcher, deadline,
+    );
+    form = answer.form;
+    if (answer.invalidJson !== undefined) {
+      feedback = draftJsonProblem(answer.invalidJson);
+      // The malformed answer itself is not shown again: on a live run the model
+      // copied its nested shape straight back.
+      failedDraft = "";
+      attempts.push({ text: answer.invalidJson, reason: feedback });
+      continue;
     }
     let decision: DraftDecision;
     try {
-      decision = parseDraftDecision(text, focused);
+      decision = parseDraftDecision(answer.text, focused);
     } catch (error) {
       // A malformed answer gets the same correction as an invalid one; it used to fail
       // the whole night before the model heard what was wrong.
       feedback = errorMessage(error);
-      failedDraft = text;
-      attempts.push({ text, reason: feedback });
+      failedDraft = answer.text;
+      attempts.push({ text: answer.text, reason: feedback });
       continue;
     }
-    if (!decision.shouldPost) return { decision };
+    if (!decision.shouldPost) return { decision, rejected: false, attempts, notes: [] };
     // The model may relabel the post; the rotation needs the theme actually researched.
     const draft = { ...decision, theme };
     const violations = draftViolations(draft, now, context);
-    if (!violations.length) return { decision: await reviewDraft(draft, focused, now, fetcher, deadline, context, notes) };
+    if (!violations.length) {
+      const review = await reviewDraft(draft, focused, now, fetcher, deadline, context);
+      return { decision: review.decision, rejected: false, attempts, notes: review.note ? [review.note] : [] };
+    }
     feedback = violations.join(" ");
     failedDraft = draft.text;
     attempts.push({ text: draft.text, reason: feedback });
   }
-  return { decision: { shouldPost: false, reason: feedback }, rejected: new DraftRejectedError(feedback, attempts, theme) };
+  return { decision: { shouldPost: false, reason: feedback }, rejected: true, attempts, notes: [] };
+}
+
+// How a draft request is sent. Each field only ever moves one way, to the lighter form,
+// and stays there for the rest of the theme.
+type RequestForm = { compact: boolean; reasoning: "medium" | "low" };
+
+// Asks for one draft. A request Groq could not answer is repeated in a lighter form
+// instead of using up a draft:
+//   - an empty or cut-off answer in strict JSON mode is usually the reasoning spending
+//     the whole completion budget, so it is asked again with low reasoning effort;
+//   - the free tier's per-minute token budget is shared by prompt and answer, so a
+//     request refused as too large is asked again with fewer, shorter excerpts.
+// Complete JSON in the wrong shape would not improve with less thinking; it, and a
+// second empty answer, come back as invalidJson to be fed back like an invalid draft.
+async function requestDraft(
+  build: (form: RequestForm) => RequestInit,
+  form: RequestForm,
+  fetcher: typeof fetch,
+  deadline: number,
+): Promise<{ form: RequestForm; text: string; invalidJson?: undefined } | { form: RequestForm; invalidJson: string }> {
+  for (;;) {
+    try {
+      return { form, text: await completeGroq(build(form), "draft", fetcher, sleep, deadline) };
+    } catch (error) {
+      const repaired = repairedAnswer(error);
+      if (repaired !== undefined) return { form, text: repaired };
+      const lighter = lighterForm(form, error);
+      if (lighter) {
+        form = lighter;
+        continue;
+      }
+      if (error instanceof GroqInvalidJsonError) return { form, invalidJson: error.failedGeneration };
+      throw error;
+    }
+  }
+}
+
+function lighterForm(form: RequestForm, error: unknown): RequestForm | undefined {
+  if (error instanceof GroqInvalidJsonError) {
+    return form.reasoning === "medium" && !parsesAsJson(error.failedGeneration) ? { ...form, reasoning: "low" } : undefined;
+  }
+  if (!form.compact && error instanceof Error && /too large/.test(error.message)) return { ...form, compact: true };
+  return undefined;
 }
 
 function parsesAsJson(text: string) {
@@ -200,76 +231,4 @@ function parsesAsJson(text: string) {
   } catch {
     return false;
   }
-}
-
-// A strict-JSON refusal whose text only needs its paragraphs unwrapped.
-function repairedAnswer(error: unknown) {
-  return error instanceof GroqInvalidJsonError ? repairDraftJson(error.failedGeneration) : undefined;
-}
-
-// Like the draft, an empty or malformed strict-JSON review is usually the reasoning
-// spending the whole completion budget, so it is asked once more with low effort. A
-// review that only nested its paragraphs is unwrapped instead.
-async function requestReview(draft: PostedDecision, results: ResearchResult[], now: Date, fetcher: typeof fetch, deadline: number) {
-  try {
-    return await completeGroq(buildReviewRequest(draft, results, now), "review", fetcher, sleep, deadline);
-  } catch (error) {
-    if (!(error instanceof GroqInvalidJsonError)) throw error;
-    const repaired = repairedAnswer(error);
-    if (repaired !== undefined) return repaired;
-  }
-  try {
-    return await completeGroq(buildReviewRequest(draft, results, now, "low"), "review", fetcher, sleep, deadline);
-  } catch (error) {
-    const repaired = repairedAnswer(error);
-    if (repaired === undefined) throw error;
-    return repaired;
-  }
-}
-
-// A validated draft is read once more against its evidence and any claim that goes
-// beyond it is pulled back. The review can decline the story outright, which counts as
-// the theme declining; a review that fails, cannot be parsed or breaks a rule is dropped
-// and the validated draft ships, with a note on the run record. It never costs the night.
-async function reviewDraft(
-  draft: PostedDecision,
-  results: ResearchResult[],
-  now: Date,
-  fetcher: typeof fetch,
-  deadline: number,
-  context: DraftContext,
-  notes: string[],
-): Promise<DraftDecision> {
-  let text: string;
-  try {
-    text = await requestReview(draft, results, now, fetcher, deadline);
-  } catch (error) {
-    notes.push(`Review pass skipped: ${errorMessage(error)}`);
-    return draft;
-  }
-  let reviewed: DraftDecision;
-  try {
-    reviewed = parseDraftDecision(text, results);
-  } catch (error) {
-    notes.push(`Review pass answer could not be parsed: ${errorMessage(error)}`);
-    return draft;
-  }
-  if (!reviewed.shouldPost) return reviewed;
-  const candidate = { ...reviewed, theme: draft.theme };
-  // A source the review dropped as unrelated was propping up the evidence bar. The
-  // validated draft must not ship on it, so this counts as the theme declining.
-  const dropped = draft.sources.filter((source) => !candidate.sources.some((kept) => kept.url === source.url));
-  if (dropped.length && !meetsEvidenceBar(candidate.sources.map((source) => source.url))) {
-    return {
-      shouldPost: false,
-      reason: `Review found a cited source that does not report this story (${dropped.map((source) => source.title).join(", ")}), and the rest cannot clear the evidence bar.`,
-    };
-  }
-  const violations = draftViolations(candidate, now, context);
-  if (violations.length) {
-    notes.push(`Review rewrite dropped because it broke a rule (${violations.join(" ")}); the validated draft stands.`);
-    return draft;
-  }
-  if (candidate.text !== draft.text) notes.push("Review pass rewrote unsupported claims.");
-  return candidate;
 }

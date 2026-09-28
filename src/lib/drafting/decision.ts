@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Draft, ResearchSource } from "./types";
+import { GroqInvalidJsonError } from "./groq";
 import type { ResearchResult } from "../research/tavily";
 import { normalizeUrl, sourceTier } from "../research/sources";
 import { isPostTheme, type PostTheme } from "../research/themes";
@@ -77,6 +78,11 @@ export function repairDraftJson(text: string): string | undefined {
   if (!changed) return undefined;
   const repaired = { ...parsed, paragraphs };
   return responseSchema.safeParse(repaired).success ? JSON.stringify(repaired) : undefined;
+}
+
+// A strict-JSON refusal whose text only needs its paragraphs unwrapped.
+export function repairedAnswer(error: unknown) {
+  return error instanceof GroqInvalidJsonError ? repairDraftJson(error.failedGeneration) : undefined;
 }
 
 function flattenParagraph(value: unknown, field: string) {
