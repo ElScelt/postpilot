@@ -66,18 +66,18 @@ For local development you need Node.js 22.9 or newer; `.nvmrc` pins 22.
 1. **Fork or clone this repository** and push it to your own GitHub account. CI runs lint, typecheck, tests, an offline draft and a production dependency audit on every push.
 2. **Edit `postpilot.config.ts`.** At minimum set `timeZone`, `persona.role` and your `themes` (see [Configuration](#configuration)). Run `npm ci && npm test` to check that it is valid.
 3. **Create the LinkedIn app.** In the [developer portal](https://www.linkedin.com/developers/apps), create an app and, on its Products tab, add both **Share on LinkedIn** and **Sign In with LinkedIn using OpenID Connect**. If either is missing, the consent screen fails with a scope error.
-4. **Import the repository into Vercel.** Under Project Settings → Functions, check that **Fluid compute** is enabled (it is the default for new projects).
-5. **Add Upstash.** From the [Vercel marketplace](https://vercel.com/marketplace/upstash), install the Upstash integration for the project with one Redis database and one QStash instance. This adds `UPSTASH_REDIS_REST_*` and `QSTASH_*`.
+4. **Import the repository into Vercel.** Under Project Settings → Functions, check that **Fluid compute** is enabled (it is the default for new projects). Importing from the dashboard detects Next.js; a project created with `vercel project add` has no framework preset, so set it to Next.js under Project Settings → Build and Deployment or the first deploy fails looking for a `public` directory.
+5. **Add Upstash.** From the [Vercel marketplace](https://vercel.com/marketplace/upstash), install the Upstash integration for the project with one Redis database and one QStash instance. This adds `UPSTASH_REDIS_REST_*` and `QSTASH_*`. If the marketplace offers no free Redis database for your account, create one at [console.upstash.com](https://console.upstash.com/) and set `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` yourself.
 6. **Set the remaining environment variables** in Vercel (Project → Settings → Environment Variables, Production). `.env.example` lists them all; the [environment variables](#environment-variables) table says where each value comes from.
    - `APP_URL`: `https://YOUR-DOMAIN`, with no path and no trailing slash.
    - `LINKEDIN_REDIRECT_URI`: `https://YOUR-DOMAIN/api/auth/linkedin/callback`.
    - `LINKEDIN_STATE_SECRET`, `AUTOMATION_SECRET`, `NTFY_TOPIC`: three different long random strings, for example from three runs of `openssl rand -hex 32`.
 
-   Vercel reads variables at deploy time, so redeploy after changing any of them.
+   Vercel reads variables at deploy time, so redeploy after changing any of them. Paste values without a trailing newline or carriage return: a value copied from a file saved with Windows line endings keeps an invisible ``, and the dashboard password or a signature check then fails.
 7. **Register the callback URL.** On the LinkedIn app's Auth tab, add `https://YOUR-DOMAIN/api/auth/linkedin/callback` under Authorized redirect URLs.
 8. **Connect LinkedIn.** Open `https://YOUR-DOMAIN/api/auth/linkedin` and approve the consent screen. The callback page shows your member id and when the authorization expires. Set `LINKEDIN_MEMBER_ID` to that id and redeploy, so nobody else can rebind the deployment.
 9. **Subscribe to your topic.** Install the ntfy app and subscribe to the `NTFY_TOPIC` value.
-10. **Open the dashboard.** Go to `https://YOUR-DOMAIN/dashboard`, enter any username and your `AUTOMATION_SECRET` as the password. The Setup card lists anything still missing. Once it is clean, press **Run now**. That run creates the QStash schedule and drafts a real post for the next publish time.
+10. **Open the dashboard.** Go to `https://YOUR-DOMAIN/dashboard`, enter any username and your `AUTOMATION_SECRET` as the password. The Setup card lists anything still missing. Once it is clean, press **Run now**. That run creates the QStash schedule and drafts a real post for the next publish time. A run takes a minute or two; the ntfy notification arrives when it finishes, and a refresh of the dashboard shows the post.
 
 From then on every run reconciles the live QStash schedule with `postpilot.config.ts`, so a schedule change takes effect after the next run or a **Run now**.
 
@@ -260,6 +260,7 @@ On the dashboard's run history: every rejected draft is listed next to the rule 
 | "The draft failed validation" | Both drafts broke a rule on the last retry. | Read the rejected drafts on the dashboard; iterate with `npm run draft`. |
 | "LinkedIn publish failed" | The publish request was rejected. | Reconnect if the message mentions authorization. A 426 on every version means `linkedInApiVersions` needs a newer entry. |
 | "A LinkedIn post never went out" | Every delivery attempt failed and the sweep retired the post. | Check LinkedIn before posting the text by hand. |
+| The dashboard rejects the right password | The `AUTOMATION_SECRET` value was saved with a trailing `` or newline. | Set the variable again without it and redeploy. |
 | Silence on a run night | The run never fired, or ntfy is down. | healthchecks.io pages you if configured. Otherwise check the QStash console and the Vercel function logs. |
 
 ## Contributing and security
