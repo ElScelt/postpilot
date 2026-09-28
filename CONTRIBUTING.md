@@ -26,7 +26,7 @@ npm run build
 npm audit --omit=dev
 ```
 
-`npm run test:redis` runs the Redis scripts (the run lock, the post store's compare-and-set) against a real Redis. CI starts one for it; locally, start Redis and Upstash's REST emulator first:
+`npm run test:redis` runs the Redis scripts (the run lock, the post store's compare-and-set) against a real Redis, one file at a time, because some of the files write the real `postpilot:*` keys. CI starts a Redis for it; locally, start Redis and Upstash's REST emulator first:
 
 ```bash
 docker network create postpilot-test

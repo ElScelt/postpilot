@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Fixed
+
+- The Redis test files run one at a time. Two of them write `postpilot:posts`, and running them in parallel made CI fail at random.
+
 ## [1.1.0] - 2026-09-28
 
 ### Added
