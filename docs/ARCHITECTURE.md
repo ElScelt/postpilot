@@ -30,9 +30,9 @@ sequenceDiagram
     P->>L: publish text post
 ```
 
-### 1. Run (`src/app/api/automation/run/route.ts` → `src/lib/automation.ts`)
+### 1. Run (`src/app/api/automation/run/route.ts` → `src/lib/automation/`)
 
-`runAutomation` is the orchestrator. Its dependencies are injected, so tests replace every service with a fake. In order, it:
+`runAutomation` (`automation/index.ts`) is the orchestrator, and each step below has a module of its own beside it. Its dependencies, including the ntfy topic, are injected, so tests replace every service with a fake. In order, it:
 
 1. **Takes a lock** keyed by the publish date, so a manual run and a scheduled firing can't both queue a post for the same morning. The lock expires after the route's `maxDuration`, so a run the platform kills never blocks QStash's retries, and only the run holding its token can release it.
 2. **Sweeps** posts still queued hours after their slot, marks them failed and alerts you. A post a killed delivery left `publishing` may be on LinkedIn, so it is marked failed with an alert to check LinkedIn and is never retried.
@@ -62,7 +62,7 @@ A draft that fails validation twice answers 500, so QStash retries with a fresh 
   - **reference:** undated documentation;
   - **unrated:** everything else, including forums, gists and account, sign-in or status portals under a vendor domain.
 
-  `meetsEvidenceBar` requires one dated primary source or two dated credible ones. `focusEvidence` passes the model only the sources it may draw on.
+  `meetsEvidenceBar` requires one dated primary source or two dated credible ones. `focusEvidence` passes the model only the sources it may draw on. The domain lists cover web development and AI vendors; `evidence` in the config adds to them. Only http(s) results are kept, since every source becomes a link on the review page and the dashboard.
 
 ### 3. Drafting (`src/lib/drafting/`)
 
@@ -71,7 +71,7 @@ A draft that fails validation twice answers 500, so QStash retries with a fresh 
 - `decision.ts` parses and normalises the model's JSON, matches cited URLs to the evidence and attaches the source metadata. When strict JSON mode refuses an answer only because its paragraphs are nested objects, `repairDraftJson` unwraps it; for anything else, `draftJsonProblem` words a correction that names what was wrong.
 - `rules.ts` is the validator: one ordered table of checks. `draftViolations` returns every violation at once, so the correction prompt can list them all. `claims.ts` holds the patterns for invented experience and history, which the prompt quotes too.
 - `review.ts` asks the model to check the passing draft sentence by sentence against the evidence. The reviewed draft must pass the validator again; otherwise the validated draft ships with a note. The review also removes a cited source that reports a different story; if the remaining sources cannot clear the evidence bar, the theme counts as declined.
-- `pipeline.ts` ties these together. It tries themes in order, gives each draft one correction, and drafts at most three themes per run. Its deadline is the run route's `maxDuration` less the time needed to queue the post and send the notification: once a theme has been drafted, no further theme starts without 75 seconds left (the first theme with evidence is always drafted, since a retry would only repeat the same searches), every Tavily and Groq request is cut off at the deadline, and a Groq rate-limit wait that would pass it fails the run instead, so the run records the failure and QStash retries it.
+- `pipeline.ts` ties these together. It tries themes in order, gives each draft one correction, and drafts at most three themes per run. Every step gets one `DraftRun` (the time, the fetch, the deadline and the settings), so nothing below the pipeline reads the global config. The deadline is the run route's `maxDuration` less `finishReserveMs` (`automation/draft.ts`), the worst case of everything the run does after drafting, computed from the Redis, QStash and ntfy timeouts: once a theme has been drafted, no further theme starts without 75 seconds left (the first theme with evidence is always drafted, since a retry would only repeat the same searches), every Tavily and Groq request is cut off at the deadline, and a Groq rate-limit wait that would pass it fails the run instead, so the run records the failure and QStash retries it.
 
 ### 4. Review and publish
 
@@ -106,7 +106,9 @@ src/
       posts/reject/          review page and Reject (HMAC-signed link)
       auth/linkedin/         OAuth start and callback
   lib/
-    automation.ts            the run orchestrator
+    automation/              the run: index.ts runs the steps, one module each (sweep, authorization,
+                             announce, draft, recent-activity); run.ts holds the shared types
+    post-refusal.ts          the wording for a Reject or edit that came too late
     queue-post.ts            store a post and queue its delayed publish message
     limits.ts                time limits, retry counts and LinkedIn's length limit
     async.ts                 sleep() and withTimeout()
@@ -114,7 +116,7 @@ src/
     env.ts, errors.ts        required() / appUrl(), errorMessage()
     config/                  schema, defaults and loader for postpilot.config.ts
     research/                themes, Tavily search, source tiers
-    drafting/                prompt, Groq client, decision parsing, validator and claims, review, pipeline
+    drafting/                prompt, Groq client, decision parsing, validator, claims and text helpers, review, pipeline
     linkedin/                publish.ts (API client), token.ts (token storage), oauth.ts (OAuth state)
     scheduling/              QStash client, schedule and publish-time maths, time zones
     storage/                 Redis client, posts, run history

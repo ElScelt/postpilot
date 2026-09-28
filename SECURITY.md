@@ -33,5 +33,5 @@ Out of scope:
   - create new Groq and Tavily keys;
   - choose a new `AUTOMATION_SECRET`, `LINKEDIN_STATE_SECRET` and `NTFY_TOPIC`.
 
-  Then redeploy. Removing a secret from git history does not revoke it.
+  Then redeploy. Removing a secret from git history does not revoke it. A new `AUTOMATION_SECRET` also invalidates the Reject links already sent: they answer with an error and cancel nothing, so reject a queued post from the dashboard instead.
 - Before committing, a scan such as `gitleaks git` catches most accidents.

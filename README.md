@@ -256,7 +256,7 @@ No theme had sources that cleared the bar, or the model judged the evidence not 
 Yes. Open the dashboard: every queued post has a text box. The original text is kept alongside your edit.
 
 **Can I change which websites count as trustworthy sources?**
-Yes, in [src/lib/research/sources.ts](src/lib/research/sources.ts). It is code rather than configuration because the tiers interact with the validator.
+You can add to them with `evidence.primaryDomains` and `evidence.credibleDomains` in `postpilot.config.ts`. The built-in lists, and the rules that make a documentation page, a forum or a sign-in portal count for nothing, are in [src/lib/research/sources.ts](src/lib/research/sources.ts).
 
 **Can I use a model other than gpt-oss-120b?**
 Only the gpt-oss models on Groq support the strict JSON schema output drafting relies on. `GROQ_MODEL` accepts any of them.

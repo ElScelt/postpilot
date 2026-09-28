@@ -4,6 +4,24 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- `evidence.primaryDomains` and `evidence.credibleDomains` in `postpilot.config.ts` add to the built-in source lists, so themes outside web development can clear the evidence bar with their own vendors' announcements. The README's Go example adds `go.dev`.
+
+### Changed
+
+- The drafting pipeline passes one `DraftRun` (time, fetch, deadline and settings) to every step, so the review, the validator, the decision parser and the Tavily search use the settings they are given instead of the global config.
+- The time the run keeps after drafting is computed from the Redis, QStash and ntfy timeouts: 94 seconds instead of a hand-counted 60, which left out recording the notice, the run and the lock release.
+- `src/lib/automation.ts` is split into `src/lib/automation/`, a module per step, and the ntfy topic is a dependency of the run.
+- `npm run check:data` no longer tells you not to deploy over a run record the dashboard would skip; it lists it separately.
+
+### Fixed
+
+- A configuration with a single theme is accepted, but the rotation rule used to reject every draft once a post existed, so every night failed. A single theme may now follow itself.
+- An invalid or expired Reject link answers 403, so the ntfy button reports a failure instead of a success while the post still publishes. This happens after `AUTOMATION_SECRET` is rotated.
+- Tavily results whose URL is not http(s) are dropped, since every source is rendered as a link.
+- The 1.1.1 notes and ARCHITECTURE said a run stopped by a disconnected LinkedIn was recorded as `stopped`; it is recorded as failed, and only the route's answer says `stopped`. Both are corrected.
+
 ## [1.1.1] - 2026-09-28
 
 ### Changed
