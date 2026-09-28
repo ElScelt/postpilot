@@ -9,21 +9,15 @@ const button = (tone: "primary" | "danger" | "plain") => ({
   color: tone === "plain" ? "#18181b" : "#fff",
 });
 
-// A submit button that can also be its own form, for actions that take no input.
-export function ActionButton({ action, label, tone }: { action?: () => Promise<ActionResult>; label: string; tone: "primary" | "danger" | "plain" }) {
-  const [state, formAction, pending] = useActionState(
-    async (_previous: ActionResult | null) => (action ? action() : null),
-    null as ActionResult | null,
-  );
-  const content = (
-    <>
-      <button type="submit" style={button(tone)} disabled={pending} formAction={action ? formAction : undefined}>
-        {pending ? "Working…" : label}
-      </button>
+// A form that is only a submit button, for actions that take no input.
+export function ActionButton({ action, label, tone }: { action: () => Promise<ActionResult>; label: string; tone: "primary" | "danger" | "plain" }) {
+  const [state, formAction, pending] = useActionState(async () => action(), null as ActionResult | null);
+  return (
+    <form action={formAction}>
+      <button type="submit" style={button(tone)} disabled={pending}>{pending ? "Working…" : label}</button>
       {state && <p style={{ color: state.ok ? "#166534" : "#991b1b", margin: ".5rem 0 0" }}>{state.message}</p>}
-    </>
+    </form>
   );
-  return action ? <form action={formAction}>{content}</form> : content;
 }
 
 export function EditForm({ id, text, maxLength }: { id: string; text: string; maxLength: number }) {

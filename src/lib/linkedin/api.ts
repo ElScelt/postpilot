@@ -79,6 +79,14 @@ export async function linkedInTokenStatus(now = Date.now(), client: TokenReader 
   return { state: token.expiresAt <= now ? "expired" : "valid", daysRemaining };
 }
 
+// The authorization as one line for the dashboard, with how urgently it needs a reconnect.
+export function tokenSummary(token: TokenStatus): { tone: "ok" | "warn" | "bad"; text: string } {
+  if (token.state === "missing") return { tone: "bad", text: "LinkedIn is not connected." };
+  if (token.state === "expired") return { tone: "bad", text: `LinkedIn authorization expired ${Math.abs(token.daysRemaining)} days ago.` };
+  if (token.daysRemaining <= reconnectWarningDays) return { tone: "warn", text: `LinkedIn authorization expires in ${token.daysRemaining} days.` };
+  return { tone: "ok", text: `LinkedIn authorization valid for ${token.daysRemaining} more days.` };
+}
+
 // Why a publish failed, as far as it matters for trying again. "rejected" means
 // LinkedIn cannot have the post: nothing was sent, or LinkedIn refused it or was briefly
 // unavailable. "unknown" means LinkedIn may have accepted it: the call timed out or
