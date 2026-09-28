@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { searchThemeEvidence } from "../src/lib/research/tavily";
 import { themeDefinition } from "../src/lib/research/themes";
+import { config } from "../src/lib/config";
 
 process.env.TAVILY_API_KEY = "test-key";
 
@@ -143,4 +144,14 @@ test("every search can be abandoned when Tavily hangs", async () => {
     return Response.json({ results: [] });
   });
   assert.ok(signals.length > 0 && signals.every((signal) => signal instanceof AbortSignal));
+});
+
+test("the search window is the source window it is given", async () => {
+  const bodies: Array<Record<string, unknown>> = [];
+  await searchThemeEvidence("ai-integration", new Date("2026-07-14T12:00:00Z"), async (_input, init) => {
+    bodies.push(JSON.parse(String(init?.body)));
+    return Response.json({ results: [] });
+  }, { limits: { ...config().limits, sourceWindowDays: 3 } });
+  assert.ok(bodies.length > 0);
+  for (const body of bodies) assert.equal(body.start_date, "2026-07-11");
 });

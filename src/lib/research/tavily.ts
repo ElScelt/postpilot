@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { required } from "../env";
 import { recentDays } from "../scheduling/time";
-import { config } from "../config";
+import { config, type Config } from "../config";
 import { evidenceDomains, meetsEvidenceBar, normalizeUrl } from "./sources";
 import { themeDefinition, type PostTheme } from "./themes";
 import { errorMessage } from "../errors";
@@ -23,6 +23,7 @@ const responseSchema = z.object({
 });
 
 type SearchPass = { includeDomains: string[]; topic: "news" | "general" };
+type SearchWindow = ReturnType<typeof recentDays>;
 
 // An advanced search takes a few seconds. One that hangs is failed like any other pass,
 // so the next pass or theme still gets its share of the run's time.
@@ -44,12 +45,14 @@ export async function searchThemeEvidence(
   theme: PostTheme,
   now = new Date(),
   fetcher: typeof fetch = fetch,
+  { limits }: Pick<Config, "limits"> = config(),
 ) {
+  const window = recentDays(now, limits.sourceWindowDays);
   const merged = new Map<string, ResearchResult>();
   for (const [index, pass] of passes.entries()) {
     let results: ResearchResult[];
     try {
-      results = await runSearches(now, fetcher, pass, theme);
+      results = await runSearches(window, fetcher, pass, theme);
     } catch (error) {
       if (index === passes.length - 1) throw error;
       console.error(`Tavily ${pass.topic} search over ${pass.includeDomains.length} domains failed:`, errorMessage(error));
@@ -67,13 +70,13 @@ export async function searchThemeEvidence(
 // Every query of the theme runs, and the results merge by URL in query order, so the
 // vendor-change query and the practitioner query each contribute their top hits.
 async function runSearches(
-  now: Date,
+  window: SearchWindow,
   fetcher: typeof fetch,
   pass: SearchPass,
   theme: PostTheme,
 ) {
   const batches = await Promise.all(
-    themeDefinition(theme).queries.map((query) => runSearch(query, now, fetcher, pass)),
+    themeDefinition(theme).queries.map((query) => runSearch(query, window, fetcher, pass)),
   );
   const merged = new Map<string, ResearchResult>();
   for (const result of batches.flat()) {
@@ -85,11 +88,10 @@ async function runSearches(
 
 async function runSearch(
   query: string,
-  now: Date,
+  window: SearchWindow,
   fetcher: typeof fetch,
   pass: SearchPass,
 ) {
-  const window = recentDays(now, config().limits.sourceWindowDays);
   const response = await fetcher("https://api.tavily.com/search", {
     method: "POST",
     signal: AbortSignal.timeout(searchTimeoutMs),

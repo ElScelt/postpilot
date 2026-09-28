@@ -331,6 +331,16 @@ test("the hard rules follow the configured persona and limits", () => {
   assert.match(hardRules(), /Keep the hook under 18 words \(about 120 characters\)/);
 });
 
+test("the draft prompt is written for the persona and limits it is given", () => {
+  const settings = config();
+  const request = buildDraftRequest(
+    { recent: noRecent, results: [{ ...source, content: "Evidence" }], now, theme: "ai-integration" },
+    { limits: { ...settings.limits, minWords: 100, maxWords: 180 }, persona: { ...settings.persona, stack: ["Go", "Postgres"] } },
+  );
+  assert.match(prompt(request), /1\. Write 100-180 words/);
+  assert.match(prompt(request), /followed by Go, Postgres\./);
+});
+
 test("every Groq request, retries included, can be abandoned when Groq hangs", async () => {
   const signals: unknown[] = [];
   let calls = 0;
