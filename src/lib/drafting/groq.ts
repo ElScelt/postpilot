@@ -84,6 +84,16 @@ function failedGeneration(body: string) {
   }
 }
 
+// The free tier's per-minute token budget counts the prompt and the completion allowance
+// together, so a request can be refused before the model sees it. The draft is asked
+// again in a compact form rather than counted as a failed attempt.
+export class GroqRequestTooLargeError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "GroqRequestTooLargeError";
+  }
+}
+
 export class GroqRateLimitError extends Error {
   constructor(message: string, readonly retryAfterSeconds: number | undefined) {
     super(message);
@@ -132,7 +142,7 @@ export async function completeGroq(
 ) {
   const response = await requestGroq(init, fetcher, wait, deadline);
   if (response.status === 413) {
-    throw new Error(`Groq refused the ${label} request as too large for the model's per-minute token limit: ${await response.text()}`);
+    throw new GroqRequestTooLargeError(`Groq refused the ${label} request as too large for the model's per-minute token limit: ${await response.text()}`);
   }
   if (!response.ok) {
     const body = await response.text();

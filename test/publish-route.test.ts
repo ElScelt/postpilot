@@ -96,6 +96,20 @@ test("a LinkedIn refusal puts the post back in the queue, answers 502 and says Q
   assert.equal(calls.alerts[0]!.title, "LinkedIn publish failed (attempt 1)");
   assert.equal(calls.alerts[0]!.priority, 3);
   assert.match(calls.alerts[0]!.body, /QStash will retry/);
+  assert.equal(calls.alerts[0]!.link, undefined, "a refusal that is not about the authorization offers no reconnect link");
+});
+
+test("a refusal of the authorization offers the reconnect link", async () => {
+  const { deps, calls } = fakes({ linkedIn: async () => new Response("invalid access token", { status: 401 }) });
+  assert.equal((await handlePublish(delivery(0), deps)).status, 502);
+  assert.equal(calls.alerts[0]!.link, "https://example.vercel.app/api/auth/linkedin");
+});
+
+test("an expired authorization offers the reconnect link without calling LinkedIn", async () => {
+  const { deps, calls } = fakes({ tokenExpiresAt: start - day });
+  assert.equal((await handlePublish(delivery(0), deps)).status, 502);
+  assert.equal(calls.linkedIn, 0);
+  assert.equal(calls.alerts[0]!.link, "https://example.vercel.app/api/auth/linkedin");
 });
 
 test("LinkedIn being briefly unavailable is retried like a refusal", async () => {

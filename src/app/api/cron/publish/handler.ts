@@ -74,7 +74,7 @@ export async function handlePublish(request: Request, overrides: Partial<Publish
         title: `LinkedIn publish failed (attempt ${attempt})`,
         body: `${message} The post scheduled for ${formatDateTime(claimed.scheduledFor)} is still queued${final ? " and QStash has given up" : " and QStash will retry"}.`,
         priority: final ? 5 : 3,
-        link: /authoriz/i.test(message) ? connectUrl() : undefined,
+        link: error.reason === "authorization" ? connectUrl() : undefined,
       });
       return NextResponse.json({ published: false, id: postId, error: message }, { status: 502 });
     }

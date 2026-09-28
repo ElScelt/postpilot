@@ -1,7 +1,7 @@
 import { draftViolations } from "./rules";
 import type { DraftContext } from "./types";
 import { draftJsonProblem, parseDraftDecision, repairedAnswer, type DraftDecision } from "./decision";
-import { completeGroq, GroqInvalidJsonError } from "./groq";
+import { completeGroq, GroqInvalidJsonError, GroqRequestTooLargeError } from "./groq";
 import { buildDraftRequest, type RecentActivity } from "./prompt";
 import { reviewDraft } from "./review";
 import { searchThemeEvidence, type ResearchResult } from "../research/tavily";
@@ -220,7 +220,7 @@ function lighterForm(form: RequestForm, error: unknown): RequestForm | undefined
   if (error instanceof GroqInvalidJsonError) {
     return form.reasoning === "medium" && !parsesAsJson(error.failedGeneration) ? { ...form, reasoning: "low" } : undefined;
   }
-  if (!form.compact && error instanceof Error && /too large/.test(error.message)) return { ...form, compact: true };
+  if (!form.compact && error instanceof GroqRequestTooLargeError) return { ...form, compact: true };
   return undefined;
 }
 

@@ -47,9 +47,10 @@ export function escapeCommentary(text: string) {
 // LinkedIn cannot have the post: nothing was sent, or LinkedIn refused it or was briefly
 // unavailable. "unknown" means LinkedIn may have accepted it: the call timed out or
 // broke, or LinkedIn failed in a way it may have after saving the post. Retrying an
-// unknown outcome risks posting the same text twice.
+// unknown outcome risks posting the same text twice. A refusal because of the
+// authorization carries that reason, so the alert can offer the reconnect link.
 export class LinkedInPublishError extends Error {
-  constructor(message: string, readonly outcome: "rejected" | "unknown") {
+  constructor(message: string, readonly outcome: "rejected" | "unknown", readonly reason?: "authorization") {
     super(message);
     this.name = "LinkedInPublishError";
   }
@@ -68,7 +69,7 @@ export async function publishTextPost(text: string, fetcher: typeof fetch = fetc
   try {
     token = await requireToken(client);
   } catch (error) {
-    throw new LinkedInPublishError(errorMessage(error), "rejected");
+    throw new LinkedInPublishError(errorMessage(error), "rejected", "authorization");
   }
   const response = await linkedInFetch("https://api.linkedin.com/rest/posts", {
     method: "POST",
@@ -86,7 +87,11 @@ export async function publishTextPost(text: string, fetcher: typeof fetch = fetc
   });
   if (!response.ok) {
     const body = await response.text().catch(() => "");
-    throw new LinkedInPublishError(`LinkedIn rejected the post (${response.status}): ${body}`, publishOutcome(response.status));
+    throw new LinkedInPublishError(
+      `LinkedIn rejected the post (${response.status}): ${body}`,
+      publishOutcome(response.status),
+      response.status === 401 ? "authorization" : undefined,
+    );
   }
   return response.headers.get("x-restli-id") ?? "published";
 }

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { DraftRejectedError, generateGroundedDraft } from "../src/lib/drafting/pipeline";
+import { GroqRequestTooLargeError } from "../src/lib/drafting/groq";
 import { themeIds, themeDefinition, themeOrder, type PostTheme } from "../src/lib/research/themes";
 
 process.env.GROQ_API_KEY = "test-key";
@@ -209,7 +210,7 @@ test("retries once with compact evidence when Groq refuses the request as too la
 
 test("a second oversized refusal is fatal", async () => {
   const { fetcher } = fakeFetch(() => [primary], ["__413__", "__413__"]);
-  await assert.rejects(() => generateGroundedDraft(noRecent, now, fetcher), /too large/);
+  await assert.rejects(() => generateGroundedDraft(noRecent, now, fetcher), GroqRequestTooLargeError);
 });
 
 test("an empty strict-JSON answer is retried with low reasoning effort, then fed back", async () => {
