@@ -1,5 +1,5 @@
 import { redis, type KeyValueStore } from "./redis";
-import { deliveryTimestamp, qstash, publishingUrl } from "../scheduling/qstash";
+import { deliveryTimestamp, publishRetries, qstash, publishingUrl } from "../scheduling/qstash";
 import type { ResearchSource } from "../drafting/types";
 import { errorMessage } from "../errors";
 
@@ -92,7 +92,7 @@ export async function schedulePost(text: string, scheduledFor: string, automatio
       url: publishingUrl(),
       body: { postId: post.id },
       notBefore: deliveryTimestamp(scheduledFor),
-      retries: 3,
+      retries: publishRetries,
       label: ["postpilot-publish", post.id],
       redact: { body: true },
       // The SDK re-sends a publish whose response was lost; without this id that is a

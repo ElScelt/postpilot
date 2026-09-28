@@ -24,6 +24,11 @@ export const runRetries = 3;
 // reads maxDuration statically, so route.ts repeats the number and a test pins the two.
 export const runTimeLimitSeconds = 300;
 
+// The morning publish is retried this many times, and its route's maxDuration is this
+// limit; route.ts repeats the number and a test pins the two.
+export const publishRetries = 3;
+export const publishTimeLimitSeconds = 60;
+
 // Which delivery of a message this is. QStash counts retries in Upstash-Retried, so the
 // last one is where alerts belong: a failure QStash will retry is not yet a lost night.
 export function deliveryAttempt(request: Request, retries: number) {
