@@ -12,12 +12,12 @@ export function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, (character) => `&#${character.charCodeAt(0)};`);
 }
 
-export function page(title: string, body: string) {
+export function page(title: string, body: string, status = 200) {
   return new NextResponse(
     `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">`
     + `<title>${escapeHtml(title)}</title>`
     + `<body style="font:16px/1.5 system-ui;margin:0;padding:2rem;max-width:40rem">${body}</body>`,
-    { headers: { "Content-Type": "text/html; charset=utf-8" } },
+    { status, headers: { "Content-Type": "text/html; charset=utf-8" } },
   );
 }
 

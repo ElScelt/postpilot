@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { addPost, cancelPost, editPostText, retainPosts, schedulePost, updatePost, type QueuedPost } from "../src/lib/storage/posts";
+import { addPost, cancelPost, editPostText, PostNotQueuedError, retainPosts, schedulePost, updatePost, type QueuedPost } from "../src/lib/storage/posts";
 
 process.env.APP_URL = "https://example.vercel.app";
 
@@ -51,6 +51,14 @@ test("cancels only a queued post, and only once", async () => {
   await cancelPost("a", { store });
   assert.equal(read()[0]!.status, "cancelled");
   await assert.rejects(() => cancelPost("a", { store }), /No queued post/);
+});
+
+test("refusing a post that is not queued says which state it is in", async () => {
+  const { store } = fakeStore([post({ status: "posted" })]);
+  await assert.rejects(() => cancelPost("a", { store }), (error) =>
+    error instanceof PostNotQueuedError && error.id === "a" && error.status === "posted");
+  await assert.rejects(() => cancelPost("gone", { store }), (error) =>
+    error instanceof PostNotQueuedError && error.status === undefined);
 });
 
 test("updating an unknown post fails loudly", async () => {

@@ -110,10 +110,25 @@ export async function schedulePost(text: string, scheduledFor: string, automatio
   }
 }
 
+// The one refusal that means "nothing to do": the post exists in another state, or the
+// history no longer holds it. Every other error, a Redis outage above all, must reach
+// the owner as a failure, because a Reject that only looks done lets the post go out.
+export class PostNotQueuedError extends Error {
+  constructor(readonly id: string, readonly status?: QueuedPost["status"]) {
+    super("No queued post exists with that id.");
+    this.name = "PostNotQueuedError";
+  }
+}
+
+function queuedPost(posts: QueuedPost[], id: string) {
+  const post = posts.find((item) => item.id === id);
+  if (post?.status !== "queued") throw new PostNotQueuedError(id, post?.status);
+  return post;
+}
+
 export async function cancelPost(id: string, deps: PostStoreDeps = {}) {
   const posts = await listPosts(deps);
-  const post = posts.find((item) => item.id === id && item.status === "queued");
-  if (!post) throw new Error("No queued post exists with that id.");
+  const post = queuedPost(posts, id);
   post.status = "cancelled";
   await save(posts, deps);
   return post;
@@ -136,8 +151,7 @@ export async function editPostText(id: string, text: string, deps: PostStoreDeps
   if (!trimmed) throw new Error("The post text cannot be empty.");
   if (trimmed.length > maxPostLength) throw new Error(`The post text exceeds ${maxPostLength} characters.`);
   const posts = await listPosts(deps);
-  const post = posts.find((item) => item.id === id && item.status === "queued");
-  if (!post) throw new Error("No queued post exists with that id.");
+  const post = queuedPost(posts, id);
   post.originalText ??= post.text;
   post.text = trimmed;
   post.editedAt = new Date().toISOString();

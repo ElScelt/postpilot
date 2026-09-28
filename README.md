@@ -183,7 +183,7 @@ Each queued draft arrives on your ntfy topic with:
 
 **Doing nothing publishes the post.** A rejected post stays in Redis as `cancelled`. Its delayed QStash message still fires, sees that the post is no longer queued, and stops. Reject followed by **Run now** on the dashboard drafts a different story for the same morning.
 
-The review page is read-only on purpose. Anyone who learns the topic name can read and reject drafts, but must never be able to rewrite or publish text under your name. Editing lives on the dashboard, behind `AUTOMATION_SECRET`. Reject links are signed with an HMAC of the post id, so they cannot be guessed for other posts. On iOS the Reject request goes through but the notification stays on screen; open the review page to confirm it took effect.
+The review page is read-only on purpose. Anyone who learns the topic name can read and reject drafts, but must never be able to rewrite or publish text under your name. Editing lives on the dashboard, behind `AUTOMATION_SECRET`. Reject links are signed with an HMAC of the post id, so they cannot be guessed for other posts. On iOS the Reject request goes through but the notification stays on screen; open the review page to confirm it took effect. If a Reject cannot reach Redis, the page says **Reject failed, try again** and answers with an error, so the ntfy button reports a failure instead of a success; the post stays queued until a retry goes through.
 
 ![Review page](docs/images/review-page.png)
 
@@ -262,6 +262,7 @@ On the dashboard's run history: every rejected draft is listed next to the rule 
 | "The draft failed validation" | Both drafts broke a rule on the last retry. | Read the rejected drafts on the dashboard; iterate with `npm run draft`. |
 | "LinkedIn publish failed" | The publish request was rejected. | Reconnect if the message mentions authorization. A 426 on every version means `linkedInApiVersions` needs a newer entry. |
 | "A LinkedIn post never went out" | Every delivery attempt failed and the sweep retired the post. | Check LinkedIn before posting the text by hand. |
+| "Reject failed, try again" | Redis could not be reached, so the post is still queued. | Tap **Try again**. If it keeps failing, check Upstash's status and reject from the dashboard once it is back. |
 | The dashboard rejects the right password | The `AUTOMATION_SECRET` value was saved with a trailing `` or newline. | Set the variable again without it and redeploy. |
 | Silence on a run night | The run never fired, or ntfy is down. | healthchecks.io pages you if configured. Otherwise check the QStash console and the Vercel function logs. |
 

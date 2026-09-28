@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
-import { cancelPost, listPosts } from "@/lib/storage/posts";
+import { cancelPost, listPosts, PostNotQueuedError } from "@/lib/storage/posts";
+import { errorMessage } from "@/lib/errors";
 import { formatDateTime } from "@/lib/scheduling/time";
 import { buttonStyle, escapeHtml, invalidLinkPage, page, rejectTarget } from "./html";
 
@@ -38,9 +39,13 @@ export async function handleReviewPage(request: NextRequest, overrides: Partial<
     ${meta}
     <pre style="white-space:pre-wrap;font:inherit;background:#f4f4f5;padding:1rem;border-radius:.5rem">${escapeHtml(post.text)}</pre>
     ${sources}
-    <form method="post" action="${escapeHtml(request.nextUrl.pathname + request.nextUrl.search)}">
-      <button style="${buttonStyle};background:#b91c1c">Reject this post</button>
-    </form>`);
+    ${rejectForm(request, "Reject this post")}`);
+}
+
+function rejectForm(request: NextRequest, label: string) {
+  return `<form method="post" action="${escapeHtml(request.nextUrl.pathname + request.nextUrl.search)}">
+      <button style="${buttonStyle};background:#b91c1c">${escapeHtml(label)}</button>
+    </form>`;
 }
 
 export async function handleReject(request: NextRequest, overrides: Partial<RejectDeps> = {}) {
@@ -51,7 +56,18 @@ export async function handleReject(request: NextRequest, overrides: Partial<Reje
     await deps.cancelPost(id);
     // The queued publish message still fires, finds the post is no longer queued, and stops.
     return page("Rejected", "<h1>Rejected</h1><p>This post will not be published.</p>");
-  } catch {
-    return page("Already handled", "<h1>Nothing to do</h1><p>This post was already published or cancelled.</p>");
+  } catch (error) {
+    if (error instanceof PostNotQueuedError) {
+      return page("Already handled", error.status
+        ? `<h1>Nothing to do</h1><p>This post is already <b>${escapeHtml(error.status)}</b>.</p>`
+        : "<h1>Nothing to do</h1><p>That post no longer exists.</p>");
+    }
+    // Anything else, typically Redis being unreachable, left the post queued. Saying so
+    // with a 500 is what makes the ntfy button report a failure instead of a success.
+    console.error("Reject failed:", errorMessage(error));
+    return page("Reject failed", `
+      <h1>Reject failed, try again</h1>
+      <p>The post is still queued and will publish unless the reject goes through.</p>
+      ${rejectForm(request, "Try again")}`, 500);
   }
 }

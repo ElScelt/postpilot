@@ -62,3 +62,28 @@ test("a second Reject says there is nothing to do", async () => {
   assert.equal(response.status, 200);
   assert.match(await response.text(), /Nothing to do/);
 });
+
+test("a Reject that could not reach storage says it failed and offers another try", async () => {
+  const { deps } = fakes();
+  deps.cancelPost = async () => { throw new Error("fetch failed"); };
+  const response = await handleReject(reviewRequest("p1", "POST"), deps);
+  assert.equal(response.status, 500, "the ntfy http action must see the failure");
+  const html = await response.text();
+  assert.match(html, /Reject failed/);
+  assert.match(html, /<form method="post" action="\/api\/posts\/reject\?id=p1&#38;token=/, "one tap retries");
+  assert.doesNotMatch(html, /Nothing to do/);
+});
+
+test("a post that is no longer queued is named by its status", async () => {
+  const { deps } = fakes([post({ status: "posted" })]);
+  const response = await handleReject(reviewRequest("p1", "POST"), deps);
+  assert.equal(response.status, 200);
+  assert.match(await response.text(), /already <b>posted<\/b>/);
+});
+
+test("a post the history no longer holds is reported as gone", async () => {
+  const { deps } = fakes([]);
+  const response = await handleReject(reviewRequest("p1", "POST"), deps);
+  assert.equal(response.status, 200);
+  assert.match(await response.text(), /no longer exists/);
+});
