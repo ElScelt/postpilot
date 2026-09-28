@@ -26,3 +26,31 @@ jobs:
         run: npm run draft -- --offline
       - run: npm run build
       - run: npm audit --omit=dev --audit-level=high
+
+  # The Lua scripts behind the run lock and the post store can only be faked in the unit
+  # tests, so this job runs them against a real Redis behind Upstash's REST emulator.
+  redis:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7.4-alpine
+      srh:
+        image: hiett/serverless-redis-http:0.0.10
+        ports: ["8079:80"]
+        env:
+          SRH_MODE: env
+          SRH_TOKEN: postpilot-test
+          SRH_CONNECTION_STRING: redis://redis:6379
+    env:
+      UPSTASH_REDIS_REST_URL: http://localhost:8079
+      UPSTASH_REDIS_REST_TOKEN: postpilot-test
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Wait for the REST emulator
+        run: timeout 60 sh -c 'until curl -s -o /dev/null http://localhost:8079; do sleep 1; done'
+      - run: npm run test:redis

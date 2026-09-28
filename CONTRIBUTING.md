@@ -26,6 +26,14 @@ npm run build
 npm audit --omit=dev
 ```
 
+`npm run test:redis` runs the Redis scripts (the run lock, the post store's compare-and-set) against a real Redis. CI starts one for it; locally, start Redis and Upstash's REST emulator first:
+
+```bash
+docker network create postpilot-test
+docker run -d --name postpilot-redis --network postpilot-test redis:7.4-alpine
+docker run -d --network postpilot-test -p 8079:80 -e SRH_MODE=env -e SRH_TOKEN=postpilot-test -e SRH_CONNECTION_STRING=redis://postpilot-redis:6379 hiett/serverless-redis-http:0.0.10
+```
+
 `npm run build` is the only check that validates what route files export, so run it before pushing a change under `src/app`. `npm run test:coverage` prints a coverage report.
 
 ## Pull requests
