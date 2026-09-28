@@ -30,6 +30,13 @@ test("flags missing Redis credentials", () => {
   assert.match(texts(env), /Redis is not configured/);
 });
 
+// The Vercel marketplace integration names them KV_REST_API_*; the live deployment this
+// project grew out of has only those.
+test("accepts the Redis variables the Vercel marketplace integration adds", () => {
+  const { UPSTASH_REDIS_REST_URL: _url, UPSTASH_REDIS_REST_TOKEN: _token, ...env } = complete;
+  assert.deepEqual(checkSetup({ ...env, KV_REST_API_URL: "https://redis.example.com", KV_REST_API_TOKEN: "t" }), []);
+});
+
 test("rejects an APP_URL that is not a bare https origin", () => {
   assert.match(texts({ ...complete, APP_URL: "http://poster.example.com" }), /must be an https origin/);
   assert.match(texts({ ...complete, APP_URL: "https://poster.example.com/" }), /no trailing slash/);
