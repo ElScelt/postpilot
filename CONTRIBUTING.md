@@ -36,7 +36,7 @@ docker run -d --network postpilot-test -p 8079:80 -e SRH_MODE=env -e SRH_TOKEN=p
 
 `npm run build` is the only check that validates what route files export, so run it before pushing a change under `src/app`.
 
-`npm run test:coverage` runs the same tests and prints a coverage report. CI runs it and fails when lines, branches or functions drop below the floor set in `package.json`, which sits a little under what the suite measures today. Node counts only the files a test loads, so the floor says nothing about `src/app/dashboard/page.tsx` and `actions.ts`: they need the Next runtime, and `npm run build` plus the tests of the helpers they call are what check them. If a change lowers coverage, add tests rather than the floor.
+`npm run test:coverage` runs the same tests and prints a coverage report. CI runs it and fails when lines, branches or functions drop below the floor set in `package.json`, which sits a little under what the suite measures today. Node counts only the files a test loads, so the floor says nothing about the dashboard's `page.tsx`, `forms.tsx` and `actions.ts`: they need the Next runtime, and `npm run build` plus the tests of what they call are what check them. `actions.ts` only hands the request to `action-handlers.ts`, which is tested. If a change lowers coverage, add tests rather than the floor.
 
 ## Pull requests
 

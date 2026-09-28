@@ -1,7 +1,8 @@
 "use client";
 
 import { useActionState } from "react";
-import { editPost, rejectPost, type ActionResult } from "./actions";
+import { editPost, rejectPost } from "./actions";
+import type { ActionResult } from "./action-handlers";
 
 const button = (tone: "primary" | "danger" | "plain") => ({
   font: "inherit", padding: ".5rem 1rem", borderRadius: ".5rem", border: 0, cursor: "pointer",

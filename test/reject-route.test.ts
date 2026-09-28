@@ -75,7 +75,7 @@ test("a post that is no longer queued is named by its status", async () => {
   const { deps } = fakes([post({ status: "posted" })]);
   const response = await handleReject(reviewRequest("p1", "POST"), deps);
   assert.equal(response.status, 200);
-  assert.match(await response.text(), /already <b>posted<\/b>/);
+  assert.match(await response.text(), /already posted\./);
 });
 
 test("a post the history no longer holds is reported as gone", async () => {
@@ -88,7 +88,7 @@ test("a post the history no longer holds is reported as gone", async () => {
 test("a post being published is too late to reject, and the page says so", async () => {
   const { deps } = fakes([post({ status: "publishing" })]);
   const html = await (await handleReject(reviewRequest("p1", "POST"), deps)).text();
-  assert.match(html, /Too late to reject/);
+  assert.match(html, /Too late/);
   const review = await (await handleReviewPage(reviewRequest("p1", "GET"), deps)).text();
   assert.match(review, /being published/);
   assert.doesNotMatch(review, /<form/, "no Reject button for a post already on its way");
