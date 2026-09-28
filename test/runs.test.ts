@@ -2,17 +2,28 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { listAutomationRuns, recordAutomationRun, type AutomationRun } from "../src/lib/storage/runs";
 
+// postpilot:runs in memory, held as the JSON string Redis would hold. The function given
+// to onNextWrite runs just before the next write lands, standing in for another request
+// recording a run between this one's read and its write.
 function fakeStore(initial: AutomationRun[] | null = null) {
-  const state = { value: initial };
+  let raw = initial === null ? null : JSON.stringify(initial);
+  let beforeWrite: (() => void) | undefined;
   return {
     store: {
-      get: async <T,>() => state.value as T | null,
-      set: async (_key: string, value: unknown) => {
-        state.value = value as AutomationRun[];
-        return "OK";
+      getRaw: async () => raw,
+      compareAndSet: async (_key: string, expected: string, next: string) => {
+        const pending = beforeWrite;
+        beforeWrite = undefined;
+        pending?.();
+        if ((raw ?? "") !== expected) return false;
+        raw = next;
+        return true;
       },
     },
-    read: () => state.value,
+    read: () => (raw === null ? null : JSON.parse(raw) as AutomationRun[]),
+    onNextWrite: (other: AutomationRun) => {
+      beforeWrite = () => { raw = JSON.stringify([...(JSON.parse(raw ?? "[]") as AutomationRun[]), other]); };
+    },
   };
 }
 
@@ -39,16 +50,24 @@ test("retains only the most recent sixty runs", async () => {
   await recordAutomationRun(run, store);
   const stored = read() ?? [];
   assert.equal(stored.length, 60);
-  assert.equal(stored.at(-1), run);
+  assert.deepEqual(stored.at(-1), run);
   assert.equal(stored[0]?.ranAt, "2026-05-02T05:00:00.000Z");
 });
 
 test("never throws when the store is unavailable", async () => {
   const failing = {
-    get: async () => { throw new Error("Redis unreachable"); },
-    set: async () => "OK",
+    getRaw: async () => { throw new Error("Redis unreachable"); },
+    compareAndSet: async () => true,
   };
   await assert.doesNotReject(() => recordAutomationRun(run, failing));
+});
+
+test("a run recorded while another request records one keeps both", async () => {
+  const crash: AutomationRun = { ranAt: "2026-07-23T05:00:01.000Z", status: "failed", reason: "Tavily search failed (503)" };
+  const { store, read, onNextWrite } = fakeStore();
+  onNextWrite(crash);
+  await recordAutomationRun(run, store);
+  assert.deepEqual(read(), [crash, run]);
 });
 
 test("reports an empty history when nothing has been recorded", async () => {

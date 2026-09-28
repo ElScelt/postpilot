@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { redis, type KeyValueStore } from "./redis";
+import { mutateStored, versionedStore, type VersionedStore } from "./redis";
 import { errorMessage } from "../errors";
 
 export type AutomationRun = {
@@ -37,20 +37,20 @@ export const runSchema = z.looseObject({
   durationMs: z.number().optional(),
 }) satisfies z.ZodType<AutomationRun>;
 
-const runsKey = "postpilot:runs";
+export const runsKey = "postpilot:runs";
 const retainedRuns = 60;
 
-async function storedRuns(client: Pick<KeyValueStore, "get">): Promise<unknown[]> {
-  const stored = await client.get<unknown>(runsKey);
-  if (stored === null) return [];
+function storedRuns(raw: string | null): unknown[] {
+  if (!raw) return [];
+  const stored: unknown = JSON.parse(raw);
   if (!Array.isArray(stored)) throw new Error(`${runsKey} does not hold a list of runs.`);
   return stored;
 }
 
 // The history is a log, so an entry this version cannot read is left out of the list
 // rather than hiding every other run, and is kept as it is when a run is recorded.
-export async function listAutomationRuns(client: KeyValueStore = redis()): Promise<AutomationRun[]> {
-  return (await storedRuns(client)).flatMap((entry) => {
+export async function listAutomationRuns(store: VersionedStore = versionedStore()): Promise<AutomationRun[]> {
+  return storedRuns(await store.getRaw(runsKey)).flatMap((entry) => {
     const result = runSchema.safeParse(entry);
     return result.success ? [result.data] : [];
   });
@@ -58,10 +58,14 @@ export async function listAutomationRuns(client: KeyValueStore = redis()): Promi
 
 // Recording a run must never break the run itself; QStash keeps its own logs for three
 // days on the free plan (seven on paid), and this is the only record that outlives them.
-export async function recordAutomationRun(run: AutomationRun, client: KeyValueStore = redis()) {
+// The run lock covers a run, but the route records a crash after the lock is released,
+// so the history is written with a compare-and-set like the post queue.
+export async function recordAutomationRun(run: AutomationRun, store: VersionedStore = versionedStore()) {
   try {
-    const runs = await storedRuns(client);
-    await client.set(runsKey, [...runs, run].slice(-retainedRuns));
+    await mutateStored(store, runsKey, {
+      parse: storedRuns,
+      serialize: (runs) => JSON.stringify(runs.slice(-retainedRuns)),
+    }, (runs) => { runs.push(run); });
   } catch (error) {
     console.error("Unable to record automation run:", errorMessage(error));
   }

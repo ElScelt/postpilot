@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { versionedStore, type VersionedStore } from "./redis";
+import { mutateStored, versionedStore, type VersionedStore } from "./redis";
 import { maxPostLength, publishTimeLimitSeconds } from "../limits";
 import type { ResearchSource } from "../drafting/types";
 
@@ -72,7 +72,7 @@ export type PostStoreDeps = {
   store?: VersionedStore;
 };
 
-const queueKey = "postpilot:posts";
+export const queueKey = "postpilot:posts";
 
 // Everything queued stays; the terminal history is capped so the single key never grows
 // toward Upstash's request limit. LinkedIn itself is the archive of what went out.
@@ -116,22 +116,14 @@ export function retainPosts(posts: QueuedPost[]) {
   return [...queued, ...terminal].sort((a, b) => a.scheduledFor.localeCompare(b.scheduledFor));
 }
 
-const maxWriteAttempts = 5;
-
 // Every change to the queue goes through here. The whole queue is one Redis value, so a
 // plain read-modify-write let concurrent writers undo each other: a dashboard edit could
-// put back a post that a Reject had just cancelled. The write lands only while the value
-// is still the one `change` saw; otherwise `change` runs again on a fresh read. It must
-// therefore only touch the array it is given, and throw to refuse.
-async function mutatePosts<T>(change: (posts: QueuedPost[]) => T, deps: PostStoreDeps): Promise<T> {
-  const store = deps.store ?? versionedStore();
-  for (let attempt = 0; attempt < maxWriteAttempts; attempt += 1) {
-    const raw = await store.getRaw(queueKey);
-    const posts = parsePosts(raw);
-    const result = change(posts);
-    if (await store.compareAndSet(queueKey, raw ?? "", JSON.stringify(retainPosts(posts)))) return result;
-  }
-  throw new Error("The post queue kept changing while this write was being made; try again.");
+// put back a post that a Reject had just cancelled.
+function mutatePosts<T>(change: (posts: QueuedPost[]) => T, deps: PostStoreDeps): Promise<T> {
+  return mutateStored(deps.store ?? versionedStore(), queueKey, {
+    parse: parsePosts,
+    serialize: (posts) => JSON.stringify(retainPosts(posts)),
+  }, change);
 }
 
 export async function addPost(text: string, scheduledFor: string, automation?: AutomationMetadata, deps: PostStoreDeps = {}) {

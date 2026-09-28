@@ -41,11 +41,37 @@ export type VersionedStore = {
   compareAndSet(key: string, expected: string, next: string): Promise<boolean>;
 };
 
+// The whole value travels twice per write, the expected copy and the new one. The post
+// queue is the largest value at about 2 KB a post, capped at 200 finished posts plus
+// what is queued, so a write stays under 1 MB against Upstash's 10 MB request limit and
+// never needs a version counter or a hash, which would add a key or a Lua function
+// Upstash does not document.
 export const compareAndSetScript = `
 local current = redis.call('GET', KEYS[1]) or ''
 if current ~= ARGV[1] then return 0 end
 redis.call('SET', KEYS[1], ARGV[2])
 return 1`;
+
+const maxWriteAttempts = 5;
+
+// Changes a JSON value in place. The write lands only while the key still holds the
+// value `change` saw; otherwise `change` runs again on a fresh read, so concurrent
+// writers never undo each other. `change` must therefore only touch the value it is
+// given, and throw to refuse.
+export async function mutateStored<T, R>(
+  store: VersionedStore,
+  key: string,
+  codec: { parse: (raw: string | null) => T; serialize: (value: T) => string },
+  change: (value: T) => R,
+): Promise<R> {
+  for (let attempt = 0; attempt < maxWriteAttempts; attempt += 1) {
+    const raw = await store.getRaw(key);
+    const value = codec.parse(raw);
+    const result = change(value);
+    if (await store.compareAndSet(key, raw ?? "", codec.serialize(value))) return result;
+  }
+  throw new Error(`${key} kept changing while this write was being made; try again.`);
+}
 
 export function versionedStore(client: Pick<Redis, "get" | "eval"> = redis({ automaticDeserialization: false })): VersionedStore {
   return {

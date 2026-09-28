@@ -20,7 +20,7 @@ test("data written by the app passes the check and reads back through the schema
     id: "a", text: "Post.", scheduledFor: "2026-09-07T06:00:00.000Z", status: "posted", createdAt: "2026-09-06T18:00:00.000Z",
   }]);
   await client.del("postpilot:runs");
-  await recordAutomationRun({ ranAt: "2026-09-06T18:00:00.000Z", status: "scheduled", durationMs: 1200 }, client);
+  await recordAutomationRun({ ranAt: "2026-09-06T18:00:00.000Z", status: "scheduled", durationMs: 1200 }, raw);
   await saveLinkedInToken({ accessToken: "token", memberId: "member", expiresAt: 1_800_000_000_000 }, client);
 
   const reports = checkStoredData({
@@ -28,6 +28,6 @@ test("data written by the app passes the check and reads back through the schema
   });
   assert.deepEqual(reports.map((report) => [report.entries, report.problems]), [[1, []], [1, []], [1, []]]);
   assert.equal((await listPosts({ store: raw }))[0]!.status, "posted");
-  assert.equal((await listAutomationRuns(client))[0]!.durationMs, 1200);
+  assert.equal((await listAutomationRuns(raw))[0]!.durationMs, 1200);
   assert.equal((await loadLinkedInToken(client))!.expiresAt, 1_800_000_000_000);
 });
