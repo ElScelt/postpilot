@@ -1,7 +1,7 @@
 import { DraftRejectedError, draftingBudgetMs, generateGroundedDraft } from "./drafting/pipeline";
 import { scheduledPostTime } from "./scheduling/schedules";
 import { abandonedPosts, isLive, listPosts, PostStateError, schedulePost, transitionPost, type QueuedPost } from "./storage/posts";
-import { recordAutomationRun } from "./storage/runs";
+import { recordAutomationRun, type AutomationRun } from "./storage/runs";
 import { reconcileAutomationSchedules } from "./scheduling/schedules";
 import { linkedInTokenStatus, reconnectWarningDays } from "./linkedin/api";
 import { notifyDraftQueued, notifyOperator } from "./notify/ntfy";
@@ -51,16 +51,24 @@ export type RunOptions = {
 const reconnect = "Reconnect at /api/auth/linkedin.";
 const recentWindowMs = 14 * dayMs;
 
+// One run as the steps below see it. Whichever step ends the run, its record carries the
+// warnings gathered so far and the time spent.
+type Run = {
+  now: Date;
+  scheduledFor: Date;
+  options: RunOptions;
+  deps: AutomationDeps;
+  warnings: string[];
+  record: (fields: Omit<AutomationRun, "ranAt" | "warning" | "durationMs">) => Promise<AutomationRun>;
+};
+
 export async function runAutomation(
   now = new Date(),
   overrides: Partial<AutomationDeps> = {},
   options: RunOptions = {},
 ) {
   const deps = { ...productionDeps(), ...overrides };
-  const ranAt = now.toISOString();
   const scheduledFor = scheduledPostTime(now);
-  const reconnectLink = connectUrl();
-  const finalAttempt = options.finalAttempt ?? true;
 
   // Two runs for the same morning (a manual test landing during the scheduled firing)
   // would each pass the duplicate check below against a stale snapshot and queue two
@@ -76,162 +84,183 @@ export async function runAutomation(
   }
 
   const warnings: string[] = [];
-  const warning = () => (warnings.length ? warnings.join(" ") : undefined);
-  const durationMs = () => Date.now() - now.getTime();
+  const run: Run = {
+    now, scheduledFor, options, deps, warnings,
+    record: (fields) => deps.recordAutomationRun({
+      ranAt: now.toISOString(), ...fields,
+      warning: warnings.length ? warnings.join(" ") : undefined, durationMs: Date.now() - now.getTime(),
+    }),
+  };
 
   try {
     const posts = await deps.listPosts();
+    await retireStuckPosts(run, posts);
+    await reconcileSchedule(run);
+    const stopped = await checkAuthorization(run);
+    if (stopped) return stopped;
 
-    // Sweep first: a post still queued hours after its slot never reached LinkedIn.
-    // Retiring it must happen even when the run cannot proceed, because a dead
-    // authorization is precisely what leaves posts stranded in the queue. A post a killed
-    // delivery left publishing may be on LinkedIn, so it is retired without a retry.
-    for (const abandoned of abandonedPosts(posts, now)) {
-      const midPublish = abandoned.status === "publishing";
-      const error = midPublish
-        ? "A delivery stopped while publishing the post; it may be live. It will not be retried."
-        : abandoned.error ?? "Post was never published before its scheduled time elapsed.";
-      try {
-        await deps.transitionPost(abandoned.id, [abandoned.status], { status: "failed", error });
-      } catch (refusal) {
-        // Published or rejected since the list was read: nothing is stranded after all.
-        if (refusal instanceof PostStateError) continue;
-        throw refusal;
-      }
-      warnings.push(`Earlier post ${abandoned.id} ${midPublish ? "may not have published" : "never published"}: ${error}`);
-      await deps.notifyOperator(midPublish
-        ? {
-          title: "A LinkedIn post may or may not have gone out",
-          body: `The post scheduled for ${formatDateTime(abandoned.scheduledFor)} was retired: ${error} Look for it on LinkedIn and post it by hand only if it is not there.`,
-          priority: 5,
-        }
-        : {
-          title: "A LinkedIn post never went out",
-          body: `The post scheduled for ${formatDateTime(abandoned.scheduledFor)} was retired: ${error} Check LinkedIn before posting it by hand.`,
-          priority: 4,
-        });
-    }
-
-    // The live QStash schedule follows the code, not the other way round. A failure here
-    // must never cost tonight's post; it only surfaces as a warning on the run record.
-    try {
-      for (const change of await deps.reconcileAutomationSchedules(undefined, undefined, { manual: options.manual })) {
-        warnings.push(`Schedule reconciled (${change}).`);
-      }
-    } catch (error) {
-      warnings.push(`Schedule reconciliation failed: ${errorMessage(error)}`);
-    }
-
-    // Drafting against a dead authorization queues a post nothing can publish, so stop
-    // here and make the run record say so. Retrying cannot fix it, hence the 200.
-    const token = await deps.linkedInTokenStatus(now.getTime());
-    if (token.state !== "valid") {
-      const reason = token.state === "missing"
-        ? `LinkedIn is not connected. ${reconnect}`
-        : `LinkedIn authorization expired ${Math.abs(token.daysRemaining)} days ago. ${reconnect}`;
-      await deps.notifyOperator({
-        title: "LinkedIn posting is stopped", body: `${reason} No post was drafted tonight.`, priority: 5, tags: "rotating_light", link: reconnectLink,
-      });
-      await deps.recordAutomationRun({ ranAt, status: "failed", reason, warning: warning(), durationMs: durationMs() });
-      return { status: "skipped" as const, reason };
-    }
-
-    // The post goes out twelve hours after this check, so judge the token against the
-    // publish instant. The draft still queues: an overnight reconnect saves it, whereas
-    // refusing the run would forfeit the night outright.
-    const atPublish = await deps.linkedInTokenStatus(scheduledFor.getTime() + 60 * 60 * 1000);
-    if (atPublish.state !== "valid") {
-      warnings.push(`LinkedIn authorization expires before the ${formatDateTime(scheduledFor)} publish. ${reconnect}`);
-      await deps.notifyOperator({
-        title: "Reconnect LinkedIn tonight",
-        body: `The authorization expires before tomorrow's ${formatDateTime(scheduledFor)} publish. Reconnect now or the post will not go out.`,
-        priority: 5, tags: "rotating_light", link: reconnectLink,
-      });
-    } else if (token.daysRemaining <= reconnectWarningDays) {
-      warnings.push(`LinkedIn authorization expires in ${token.daysRemaining} days. ${reconnect}`);
-      await deps.notifyOperator({
-        title: `LinkedIn authorization expires in ${token.daysRemaining} days`,
-        body: "LinkedIn issues no refresh token, so open the link and approve the consent screen again before it lapses.",
-        priority: 3, tags: "hourglass", link: reconnectLink,
-      });
-    }
-
-    const duplicate = posts.find((post) =>
-      post.automation !== undefined
-      && post.scheduledFor.slice(0, 10) === scheduledFor.toISOString().slice(0, 10)
-      && (isLive(post) || post.status === "posted"),
-    );
+    const duplicate = findDuplicate(posts, scheduledFor);
     if (duplicate) {
       const reason = `Automation already created post ${duplicate.id}.`;
-      await deps.recordAutomationRun({ ranAt, status: "skipped", reason, warning: warning(), durationMs: durationMs() });
+      await run.record({ status: "skipped", reason });
       return { status: "skipped" as const, reason };
     }
-
-    const recent = recentActivity(posts, now);
-    let outcome;
-    try {
-      // The budget runs from the start of the run, not from here: the sweep, the schedule
-      // and the token checks have already spent some of the route's time.
-      outcome = await deps.generateGroundedDraft(recent, now, undefined, { deadline: now.getTime() + draftingBudgetMs });
-    } catch (error) {
-      if (!(error instanceof DraftRejectedError)) throw error;
-      // Recorded here so the rejected drafts survive; the route still answers 500 so
-      // QStash retries with a fresh sample, which rescues most such nights.
-      await deps.recordAutomationRun({
-        ranAt, status: "failed", reason: error.message, warning: warning(),
-        theme: error.theme, attempts: error.attempts, durationMs: durationMs(),
-      });
-      if (finalAttempt) {
-        await deps.notifyOperator({
-          title: "No LinkedIn post tonight: the draft failed validation",
-          body: `Theme ${error.theme}. Last rejection: ${error.message}`,
-          priority: 3,
-        });
-      }
-      throw error;
-    }
-    const { decision, theme, themesTried, evidenceHosts, attempts } = outcome;
-    if (outcome.notes?.length) warnings.push(...outcome.notes);
-    if (!decision.shouldPost) {
-      await deps.recordAutomationRun({
-        ranAt, status: "skipped", reason: decision.reason, warning: warning(),
-        theme, themesTried, evidenceHosts, attempts, durationMs: durationMs(),
-      });
-      await deps.notifyOperator({
-        title: "No LinkedIn post tonight", body: decision.reason, priority: 2, tags: "zzz",
-      });
-      return { status: "skipped" as const, reason: decision.reason };
-    }
-
-    const post = await deps.schedulePost(decision.text, scheduledFor.toISOString(), {
-      topic: decision.topic,
-      theme: decision.theme,
-      sources: decision.sources,
-    });
-    const topic = envValue("NTFY_TOPIC");
-    if (!topic) {
-      warnings.push("NTFY_TOPIC is unset, so the draft publishes without review.");
-    } else if (!(await deps.notifyDraftQueued({
-      postId: post.id, text: decision.text, scheduledFor: post.scheduledFor, topic, appUrl: appUrl(),
-    }))) {
-      warnings.push("Draft notification could not be delivered.");
-    }
-    await deps.recordAutomationRun({
-      ranAt, status: "scheduled", postId: post.id, topic: decision.topic,
-      warning: warning(), theme, themesTried, evidenceHosts, attempts, scheduledFor: post.scheduledFor, durationMs: durationMs(),
-    });
-    return {
-      status: "scheduled" as const,
-      id: post.id,
-      scheduledFor: post.scheduledFor,
-      topic: decision.topic,
-      theme: decision.theme,
-      sources: decision.sources,
-      warnings,
-    };
+    return await draftAndQueue(run, posts);
   } finally {
     await deps.releaseRunLock(lockKey, lockToken);
   }
+}
+
+// Sweep first: a post still queued hours after its slot never reached LinkedIn.
+// Retiring it must happen even when the run cannot proceed, because a dead
+// authorization is precisely what leaves posts stranded in the queue. A post a killed
+// delivery left publishing may be on LinkedIn, so it is retired without a retry.
+async function retireStuckPosts({ now, deps, warnings }: Run, posts: QueuedPost[]) {
+  for (const abandoned of abandonedPosts(posts, now)) {
+    const midPublish = abandoned.status === "publishing";
+    const error = midPublish
+      ? "A delivery stopped while publishing the post; it may be live. It will not be retried."
+      : abandoned.error ?? "Post was never published before its scheduled time elapsed.";
+    try {
+      await deps.transitionPost(abandoned.id, [abandoned.status], { status: "failed", error });
+    } catch (refusal) {
+      // Published or rejected since the list was read: nothing is stranded after all.
+      if (refusal instanceof PostStateError) continue;
+      throw refusal;
+    }
+    warnings.push(`Earlier post ${abandoned.id} ${midPublish ? "may not have published" : "never published"}: ${error}`);
+    await deps.notifyOperator(midPublish
+      ? {
+        title: "A LinkedIn post may or may not have gone out",
+        body: `The post scheduled for ${formatDateTime(abandoned.scheduledFor)} was retired: ${error} Look for it on LinkedIn and post it by hand only if it is not there.`,
+        priority: 5,
+      }
+      : {
+        title: "A LinkedIn post never went out",
+        body: `The post scheduled for ${formatDateTime(abandoned.scheduledFor)} was retired: ${error} Check LinkedIn before posting it by hand.`,
+        priority: 4,
+      });
+  }
+}
+
+// The live QStash schedule follows the code, not the other way round. A failure here
+// must never cost tonight's post; it only surfaces as a warning on the run record.
+async function reconcileSchedule({ deps, options, warnings }: Run) {
+  try {
+    for (const change of await deps.reconcileAutomationSchedules(undefined, undefined, { manual: options.manual })) {
+      warnings.push(`Schedule reconciled (${change}).`);
+    }
+  } catch (error) {
+    warnings.push(`Schedule reconciliation failed: ${errorMessage(error)}`);
+  }
+}
+
+// Drafting against a dead authorization queues a post nothing can publish, so the run
+// stops here and its record says so. Retrying cannot fix it, hence a skip rather than an
+// error. An authorization that is only running out adds a warning and an alert.
+async function checkAuthorization(run: Run) {
+  const { now, scheduledFor, deps, warnings } = run;
+  const reconnectLink = connectUrl();
+  const token = await deps.linkedInTokenStatus(now.getTime());
+  if (token.state !== "valid") {
+    const reason = token.state === "missing"
+      ? `LinkedIn is not connected. ${reconnect}`
+      : `LinkedIn authorization expired ${Math.abs(token.daysRemaining)} days ago. ${reconnect}`;
+    await deps.notifyOperator({
+      title: "LinkedIn posting is stopped", body: `${reason} No post was drafted tonight.`, priority: 5, tags: "rotating_light", link: reconnectLink,
+    });
+    await run.record({ status: "failed", reason });
+    return { status: "skipped" as const, reason };
+  }
+
+  // The post goes out twelve hours after this check, so judge the token against the
+  // publish instant. The draft still queues: an overnight reconnect saves it, whereas
+  // refusing the run would forfeit the night outright.
+  const atPublish = await deps.linkedInTokenStatus(scheduledFor.getTime() + 60 * 60 * 1000);
+  if (atPublish.state !== "valid") {
+    warnings.push(`LinkedIn authorization expires before the ${formatDateTime(scheduledFor)} publish. ${reconnect}`);
+    await deps.notifyOperator({
+      title: "Reconnect LinkedIn tonight",
+      body: `The authorization expires before tomorrow's ${formatDateTime(scheduledFor)} publish. Reconnect now or the post will not go out.`,
+      priority: 5, tags: "rotating_light", link: reconnectLink,
+    });
+  } else if (token.daysRemaining <= reconnectWarningDays) {
+    warnings.push(`LinkedIn authorization expires in ${token.daysRemaining} days. ${reconnect}`);
+    await deps.notifyOperator({
+      title: `LinkedIn authorization expires in ${token.daysRemaining} days`,
+      body: "LinkedIn issues no refresh token, so open the link and approve the consent screen again before it lapses.",
+      priority: 3, tags: "hourglass", link: reconnectLink,
+    });
+  }
+  return undefined;
+}
+
+// A post the automation already made for this morning, still on its way or already out.
+function findDuplicate(posts: QueuedPost[], scheduledFor: Date) {
+  return posts.find((post) =>
+    post.automation !== undefined
+    && post.scheduledFor.slice(0, 10) === scheduledFor.toISOString().slice(0, 10)
+    && (isLive(post) || post.status === "posted"),
+  );
+}
+
+async function draftAndQueue(run: Run, posts: QueuedPost[]) {
+  const { now, scheduledFor, options, deps, warnings } = run;
+  let outcome;
+  try {
+    // The budget runs from the start of the run, not from here: the sweep, the schedule
+    // and the token checks have already spent some of the route's time.
+    outcome = await deps.generateGroundedDraft(recentActivity(posts, now), now, undefined, { deadline: now.getTime() + draftingBudgetMs });
+  } catch (error) {
+    if (!(error instanceof DraftRejectedError)) throw error;
+    // Recorded here so the rejected drafts survive; the route still answers 500 so
+    // QStash retries with a fresh sample, which rescues most such nights.
+    await run.record({ status: "failed", reason: error.message, theme: error.theme, attempts: error.attempts });
+    if (options.finalAttempt ?? true) {
+      await deps.notifyOperator({
+        title: "No LinkedIn post tonight: the draft failed validation",
+        body: `Theme ${error.theme}. Last rejection: ${error.message}`,
+        priority: 3,
+      });
+    }
+    throw error;
+  }
+  const { decision, theme, themesTried, evidenceHosts, attempts } = outcome;
+  if (outcome.notes?.length) warnings.push(...outcome.notes);
+  if (!decision.shouldPost) {
+    await run.record({ status: "skipped", reason: decision.reason, theme, themesTried, evidenceHosts, attempts });
+    await deps.notifyOperator({
+      title: "No LinkedIn post tonight", body: decision.reason, priority: 2, tags: "zzz",
+    });
+    return { status: "skipped" as const, reason: decision.reason };
+  }
+
+  const post = await deps.schedulePost(decision.text, scheduledFor.toISOString(), {
+    topic: decision.topic,
+    theme: decision.theme,
+    sources: decision.sources,
+  });
+  const topic = envValue("NTFY_TOPIC");
+  if (!topic) {
+    warnings.push("NTFY_TOPIC is unset, so the draft publishes without review.");
+  } else if (!(await deps.notifyDraftQueued({
+    postId: post.id, text: decision.text, scheduledFor: post.scheduledFor, topic, appUrl: appUrl(),
+  }))) {
+    warnings.push("Draft notification could not be delivered.");
+  }
+  await run.record({
+    status: "scheduled", postId: post.id, topic: decision.topic,
+    theme, themesTried, evidenceHosts, attempts, scheduledFor: post.scheduledFor,
+  });
+  return {
+    status: "scheduled" as const,
+    id: post.id,
+    scheduledFor: post.scheduledFor,
+    topic: decision.topic,
+    theme: decision.theme,
+    sources: decision.sources,
+    warnings,
+  };
 }
 
 // What tonight's draft must differ from. Published and queued posts constrain the
