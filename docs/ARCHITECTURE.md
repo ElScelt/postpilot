@@ -58,7 +58,7 @@ A draft that fails validation twice answers 500, so QStash retries with a fresh 
   - **primary:** the vendor's own announcement;
   - **credible:** an established publisher;
   - **reference:** undated documentation;
-  - **unrated:** everything else.
+  - **unrated:** everything else, including forums, gists and account, sign-in or status portals under a vendor domain.
 
   `meetsEvidenceBar` requires one dated primary source or two dated credible ones. `focusEvidence` passes the model only the sources it may draw on.
 
@@ -66,9 +66,9 @@ A draft that fails validation twice answers 500, so QStash retries with a fresh 
 
 - `prompt.ts` builds the generation prompt from the persona, the hard rules (which quote `rules.ts` word lists) and the evidence. It also defines the strict JSON schema the model must answer in.
 - `groq.ts` is the only code that talks to Groq. It handles retries, rate limits, and a smaller retry when a request is too large for the free tier.
-- `decision.ts` parses and normalises the model's JSON, matches cited URLs to the evidence and attaches the source metadata.
+- `decision.ts` parses and normalises the model's JSON, matches cited URLs to the evidence and attaches the source metadata. When strict JSON mode refuses an answer only because its paragraphs are nested objects, `repairDraftJson` unwraps it; for anything else, `draftJsonProblem` words a correction that names what was wrong.
 - `rules.ts` is the validator. `draftViolations` returns every violation at once, so the correction prompt can list them all.
-- `review.ts` asks the model to check the passing draft sentence by sentence against the evidence. The reviewed draft must pass the validator again; otherwise the validated draft ships with a note.
+- `review.ts` asks the model to check the passing draft sentence by sentence against the evidence. The reviewed draft must pass the validator again; otherwise the validated draft ships with a note. The review also removes a cited source that reports a different story; if the remaining sources cannot clear the evidence bar, the theme counts as declined.
 - `pipeline.ts` ties these together. It tries themes in order, gives each draft one correction, and drafts at most three themes per run inside the function's time budget.
 
 ### 4. Review and publish

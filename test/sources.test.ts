@@ -119,3 +119,11 @@ test("the model writes from dated sources and their publishers' reference pages 
   const release = { url: "https://github.com/vercel/next.js/releases/tag/v16.3.0" };
   assert.deepEqual(focusEvidence([readme, release]), [readme, release]);
 });
+
+test("account, sign-in and status portals under a vendor domain count for nothing", () => {
+  for (const url of ["https://myaccount.microsoft.com/", "https://accounts.google.com/signin", "https://status.openai.com/incidents/x", "https://login.vercel.com/"]) {
+    assert.equal(sourceTier(url), "unrated", url);
+  }
+  assert.equal(sourceTier("https://microsoft.com/blog/2026/09/announcement"), "primary");
+  assert.equal(meetsEvidenceBar(["https://myaccount.microsoft.com/"]), false);
+});

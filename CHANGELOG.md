@@ -32,3 +32,8 @@ First public release.
   - Redis keys (`postpilot:token`, `postpilot:posts`, `postpilot:runs`, `postpilot:run-lock:<date>`);
   - the QStash schedule id (`postpilot-run`) and message labels;
   - the OAuth state cookie.
+- Draft checks added after the first live test:
+  - the validator rejects missing full stops, run-together compounds ("adhoc", "a trade off") and present-tense claims about the author's own systems ("our component library renders"), and tells a short draft how many words to add;
+  - a strict-JSON answer that nests its paragraphs is unwrapped instead of discarded, and any other malformed answer gets a correction naming what was wrong;
+  - the review pass drops a cited source that reports a different story, and declines the post when the remaining sources cannot clear the evidence bar;
+  - account, sign-in and status portals under a vendor domain (such as `myaccount.microsoft.com`) never count as sources.

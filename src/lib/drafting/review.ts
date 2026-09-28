@@ -31,6 +31,7 @@ Read every sentence of the draft and find the passage in the evidence that suppo
 A claim the evidence states or measures directly stays as it is.
 A claim that stretches the evidence beyond what it measured goes only as far as the evidence goes: a hello-world startup benchmark is not a faster development loop, a price change is not a saving for your app, one vendor's result is not a general truth. Rewrite such a sentence to say exactly what the evidence supports, or to present the extension as your own expectation and what you would verify, never as a fact.
 A claim with no support in the evidence is removed.
+Check every URL in sourceUrls against the evidence: each must report the same development the post is about. If one reports something else (a different product, study or announcement that only shares a buzzword), remove it from sourceUrls when a tier "primary" source for the story remains; otherwise set shouldPost false and name that source in reason. An unrelated article never counts as corroboration.
 Change as little as possible: keep the topic, the theme, the sourceUrls, the paragraph structure, the voice and the closing question, unless the question rests on an unsupported claim. If every claim is supported, return the draft unchanged.
 Answer with the whole post in the same JSON shape with shouldPost true. If the post cannot be made honest without losing its point, set shouldPost false and explain in reason.
 ${hardRules()}

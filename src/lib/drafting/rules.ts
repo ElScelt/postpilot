@@ -32,6 +32,41 @@ const fabricatedHistory = new RegExp(
   `|\\b(?:i|we)\\b(?:'ve|\\s+have)?\\s+(?:just\\s+|already\\s+|finally\\s+|recently\\s+)?(?:been\\s+\\w+ing|${experienceVerbs.join("|")})\\b`, "i",
 );
 
+// The same invention in the present tense: "Our component library renders dynamic OG
+// images from user-provided text" went into a queued post on the first live test. A claim
+// about the author's own system is framed as "if your app renders..." instead. Modals and
+// "needs" state an intention or a requirement, and a noun after the system ("our app
+// users") is not a verb, so both pass.
+const ownSystems = [
+  "codebase", "code ?base", "app", "apps", "application", "applications", "project", "projects", "stack",
+  "team", "pipeline", "pipelines", "service", "services", "product", "repo", "repository", "monorepo",
+  "library", "libraries", "components?", "frontend", "backend", "api", "site", "website", "dashboard",
+  "platform", "infrastructure", "database", "tests", "test suite", "suite", "workers?", "builds?",
+].join("|");
+const notAVerb = [
+  "as", "its", "this", "thus", "us", "plus", "across", "unless", "less", "whereas", "always", "perhaps",
+  "towards", "versus", "needs", "need", "speed", "feed", "seed", "users", "customers", "teams", "pages",
+  "routes", "endpoints", "components", "requests", "errors", "logs", "costs", "bills", "calls", "tests",
+  "builds", "files", "types", "hooks", "props", "jobs", "queries", "tables", "models", "settings",
+].join("|");
+const ownSystemClaim = new RegExp(
+  `\\b(?:our|my)\\s+(?:[a-z][\\w-]*\\s+){0,2}?(?:${ownSystems})\\s+` +
+  `(?!(?:would|could|should|might|may|will|can|must|${notAVerb})\\b)(?:[a-z]{2,}s|[a-z]{2,}ed)\\b`, "i",
+);
+
+// Prose paragraphs end in punctuation and sentences are separated by it. A queued post
+// on the first live test read "announced in August 2024 The same source notes..." with
+// every full stop missing. A lowercase word or a figure followed by a capitalised
+// sentence opener and a lowercase word is a missing full stop; titles stay capitalised
+// on both sides and are not matched. Checklist lines (a paragraph of several lines) and
+// the hook, which reads as a headline, may end without one.
+const missingSentenceBreak = /(?:\b[a-z][\w'’-]*|\b\d[\d.,%]*)\s+(?:The|This|That|These|Those|It|We|You|But|So|If|When)(?=\s+[a-z])/;
+const terminalPunctuation = /[.!?:;)"'”’]$/;
+
+// Compounds the model writes unhyphenated or run together. "trade off" is a verb and
+// fine; after an article it is the noun and needs its hyphen.
+const brokenCompound = /\badhoc\b|\b(?:a|the|this|that|each|every|one)\s+trade\s+offs?\b/i;
+
 // The reader sees the post, never the research. "Both sources were published in late
 // August 2026" is the model reporting its homework.
 const researchCommentary = /\b(?:both|the|these|those|two|three|my|our)\s+(?:sources|evidence|excerpts)\b|\b(?:was|were)\s+published\b|\bpublished\s+(?:in|on)\s+(?:late|early|mid)\b/i;
@@ -118,9 +153,9 @@ export function draftViolations(
   if (link) {
     violations.push(`Draft contains a link or e-mail address ("${link[0]}"); name the publisher in the sentence and keep URLs in sourceUrls.`);
   }
-  const history = text.match(fabricatedHistory);
+  const history = text.match(fabricatedHistory) ?? text.match(ownSystemClaim);
   if (history) {
-    violations.push(`Draft states invented history ("${history[0]}"); say what you would do or verify instead of what was done.`);
+    violations.push(`Draft states invented history ("${history[0]}"); say what you would do or verify, and write "if your app..." rather than describing your own system as fact.`);
   }
   const commentary = text.match(researchCommentary);
   if (commentary) {
@@ -141,7 +176,25 @@ export function draftViolations(
   }
   const words = text.split(/\s+/).length;
   if (words < limits.minWords || words > limits.maxWords) {
-    violations.push(`Draft must contain ${limits.minWords} to ${limits.maxWords} words; received ${words}.`);
+    // The bare range was not enough: a corrected draft came back at 133 words against a
+    // floor of 140. The model is told how far to move and toward the middle, not the edge.
+    const target = wordTarget(limits);
+    const fix = words < limits.minWords
+      ? `Add about ${target - words} words, for example one more concrete sentence in the context or insight paragraph.`
+      : `Cut about ${words - target} words.`;
+    violations.push(`Draft must contain ${limits.minWords} to ${limits.maxWords} words; received ${words}. ${fix}`);
+  }
+  const unterminated = unterminatedParagraphs(text);
+  if (unterminated.length) {
+    violations.push(`A paragraph ends without a full stop ("...${lastWords(unterminated[0]!, 6)}"); end every sentence with punctuation.`);
+  }
+  const runOn = text.match(missingSentenceBreak);
+  if (runOn) {
+    violations.push(`Draft runs two sentences together without a full stop ("${runOn[0]}"); punctuate every sentence.`);
+  }
+  const compound = text.match(brokenCompound);
+  if (compound) {
+    violations.push(`Draft misspells a compound word ("${compound[0]}"); write "ad hoc" and the noun "trade-off".`);
   }
   if (!text.includes("\n\n")) violations.push("Draft needs mobile-friendly paragraph spacing.");
   if (!text.endsWith("?")) violations.push("Draft must end with a genuine question.");
@@ -260,6 +313,20 @@ export function spelledNumbers(text: string) {
     if (total + current >= 10) found.push(match[0]);
   }
   return [...new Set(found)];
+}
+
+export function wordTarget(limits: Pick<Config["limits"], "minWords" | "maxWords">) {
+  return Math.round((limits.minWords + limits.maxWords) / 2);
+}
+
+function unterminatedParagraphs(text: string) {
+  const paragraphs = text.trim().split(/\n{2,}/).map((paragraph) => paragraph.trim());
+  return paragraphs.slice(1, -1)
+    .filter((paragraph) => paragraph && !paragraph.includes("\n") && !terminalPunctuation.test(paragraph));
+}
+
+function lastWords(text: string, count: number) {
+  return text.split(/\s+/).slice(-count).join(" ");
 }
 
 export function firstParagraph(text: string) {

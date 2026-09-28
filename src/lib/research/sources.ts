@@ -62,6 +62,14 @@ const referenceHosts = ["docs.", "developer.", "developers.", "learn.", "msdn.",
 // the vendor domain they sit under: forum.cursor.com is not Cursor speaking.
 const userContentHosts = ["gist.", "forum.", "forums.", "community.", "discuss.", "discussions."];
 
+// Account, sign-in, store and status portals sit under a vendor domain but announce
+// nothing. myaccount.microsoft.com came back as a dated "primary" result for most themes
+// on the first live test, which alone would have cleared the evidence bar.
+const portalHosts = [
+  "myaccount.", "account.", "accounts.", "login.", "signin.", "signup.", "auth.", "portal.",
+  "status.", "store.", "shop.", "careers.", "jobs.",
+];
+
 function isReferencePage(url: string) {
   if (!URL.canParse(url)) return false;
   const parsed = new URL(url);
@@ -84,7 +92,7 @@ function isReferencePage(url: string) {
 export function sourceTier(url: string): SourceTier {
   if (!URL.canParse(url)) return "unrated";
   const host = new URL(url).hostname.toLowerCase();
-  if (userContentHosts.some((prefix) => host.startsWith(prefix))) return "unrated";
+  if ([...userContentHosts, ...portalHosts].some((prefix) => host.startsWith(prefix))) return "unrated";
   const base = matchedDomain(host, primaryDomains) ? "primary" : matchedDomain(host, credibleDomains) ? "credible" : "unrated";
   if (base === "unrated") return base;
   return isReferencePage(url) ? "reference" : base;
