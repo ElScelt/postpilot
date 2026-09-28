@@ -38,7 +38,7 @@ export async function authorizeRunRequest(
   return Boolean(secret) && constantTimeEqual(request.headers.get("authorization") ?? "", `Bearer ${secret}`);
 }
 
-async function verifyQStashSignature(request: Request, body: string) {
+export async function verifyQStashSignature(request: Request, body: string) {
   const receiver = new Receiver({
     currentSigningKey: required("QSTASH_CURRENT_SIGNING_KEY"),
     nextSigningKey: required("QSTASH_NEXT_SIGNING_KEY"),

@@ -1,5 +1,5 @@
 import { config, weekdays, type Config } from "../config";
-import { automationUrl, qstash } from "./qstash";
+import { automationUrl, qstash, runRetries } from "./qstash";
 import { dayMs, localParts, localTimeToUtc } from "./time";
 
 type ScheduleSettings = Pick<Config, "timeZone" | "schedule">;
@@ -8,10 +8,6 @@ type PublishSettings = Pick<Config, "timeZone" | "publishHour">;
 // Creating a schedule with this id again overwrites it in place, so a deployment only
 // ever holds one.
 export const runScheduleId = "postpilot-run";
-
-// Every run, scheduled or started from the dashboard, is retried this many times with a
-// fresh sample; the run route alerts only on the last attempt.
-export const runRetries = 3;
 
 export function runCron({ timeZone, schedule }: ScheduleSettings = config()) {
   const days = [...new Set(schedule.days)].map((day) => weekdays.indexOf(day)).sort((a, b) => a - b);
