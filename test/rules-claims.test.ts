@@ -53,6 +53,9 @@ const historyRows: Array<[string, boolean]> = [
   ["Our pipeline has one slow job.", true],
   ["My API tests failed after the upgrade.", true],
   ["Our checkout service handled the spike.", true],
+  // Every system the present-tense rule knows is also covered in the past tense.
+  ["Our database had no index on that column.", true],
+  ["My website used to render on the server.", true],
   ["If your app renders OG images, cache them.", false],
   ["Our app would need a queue for this.", false],
   ["Our app needs a queue for this.", false],

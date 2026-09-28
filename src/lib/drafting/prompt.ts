@@ -1,5 +1,6 @@
 import { config, type Config } from "../config";
-import { experienceVerbs, freshnessWords, firstParagraph, lastParagraph, openingWords, wordTarget } from "./rules";
+import { bannedQuestionOpener, freshnessWords, firstParagraph, lastParagraph, openingWords, wordTarget } from "./rules";
+import { experienceVerbs } from "./claims";
 import { groqRequest } from "./groq";
 import { sourceTier } from "../research/sources";
 import type { ResearchResult } from "../research/tavily";
@@ -205,7 +206,7 @@ Do not write a release recap. Treat the news as raw material: take a clear posit
 Make the post demonstrate engineering judgment: state the choice you would make and what you would test, measure, or verify before adopting the capability. Stating an opinion or a decision is encouraged; inventing a benchmark you ran, a personal usage story, or a production result is not, unless the evidence supplies it directly.
 The hook is the opening line and must be a concrete claim, decision, or observation, never a question. Tonight's hook form: ${hookForm}. Never open with "I'm standardizing on", "I'm committing to", "I'm planning to", or "I'm wiring", with the template "When X, ... does A outweigh B?", or with "Ever wondered".${previousFirstWord ? ` The previous hook started with "${previousFirstWord}"; start with a different word.` : ""}${recentHookOpeners.length ? ` Do not begin the hook with any of these openers: ${JSON.stringify(recentHookOpeners)}.` : ""}
 Context explains the verified event; insight gives developer analysis; takeaway is ${takeawayForm}, a reusable rule or short checklist a reader would save to act on tomorrow, written as plain text with each item on its own line, and never opens with "Before committing" or "Before adopting".
-Close with a specific question about a trade-off or workflow, not a generic “What do you think?”. Never open the question with "How do you balance".${recentQuestionOpeners.length ? ` Do not begin the question with any of these openers: ${JSON.stringify(recentQuestionOpeners)}.` : ""}
+Close with a specific question about a trade-off or workflow, not a generic “What do you think?”. Never open the question with "${bannedQuestionOpener}".${recentQuestionOpeners.length ? ` Do not begin the question with any of these openers: ${JSON.stringify(recentQuestionOpeners)}.` : ""}
 Avoid hype, fake personal experience, a Topic label, engagement bait, and calls to like, comment, or repost.
 ${correction}
 If the evidence is unsuitable, set shouldPost false and return empty topic, all five empty paragraph fields, and sourceUrls.`;

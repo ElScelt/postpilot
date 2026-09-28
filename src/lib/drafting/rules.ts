@@ -2,11 +2,12 @@ import { config, type Config } from "../config";
 import { meetsEvidenceBar } from "../research/sources";
 import { recentDays } from "../scheduling/time";
 import { maxPostLength } from "../limits";
+import { experienceClaim, inventedHistory } from "./claims";
 import { spelledNumbers, unsupportedNumbers } from "./numbers";
 import type { Draft, DraftContext, ResearchSource } from "./types";
 
-// The word lists are exported so the prompt quotes exactly what the validator enforces;
-// two hand-kept copies drifted apart before.
+// The word lists and phrases are exported so the prompt quotes exactly what the
+// validator enforces; two hand-kept copies drifted apart before.
 export const freshnessWords = [
   "just", "today", "yesterday", "this week", "this month", "this year", "earlier this year",
   "recently", "latest", "brand-new", "newly", "right now",
@@ -15,53 +16,9 @@ const freshnessClaim = new RegExp(
   `\\b(${freshnessWords.map((word) => word.replace("-", "[- ]")).join("|")})\\b`, "i",
 );
 
-// The hook may state a decision, a position, or an intention, but never a personal test,
-// measurement, or usage history the evidence cannot support.
-export const experienceVerbs = [
-  "ran", "tested", "benchmarked", "measured", "profiled", "tried", "used", "deployed", "shipped",
-  "migrated", "rewrote", "replaced", "switched", "stopped", "started", "spent", "cut", "saved",
-  "reduced", "found",
-];
-// "I tested", "we've just migrated", "I have been profiling".
-function experiencePattern(adverbs: string[]) {
-  return `\\b(?:i|we)\\b(?:'ve|\\s+have)?\\s+(?:(?:${adverbs.join("|")})\\s+)?(?:been\\s+\\w+ing|${experienceVerbs.join("|")})\\b`;
-}
-const experienceClaim = new RegExp(experiencePattern(["just", "already", "finally"]), "i");
-
-// The hook rule above guards the opening line; the body needs the same guard, because
-// "Our codebase was on Next.js 14, so the upgrade became mandatory" is invented history
-// wherever it appears. Decisions are stated in the present or the conditional. "We
-// recently migrated" passes in a hook, where it reads as news, but not as history.
-const historySystems = [
-  "codebase", "code\\s?base", "app", "apps", "application", "project", "projects", "stack", "team", "pipeline",
-  "service", "services", "product", "repo", "repository", "monorepo",
-].join("|");
-const historyVerbs = ["was", "were", "had", "has\\s+been", "have\\s+been", "used\\s+to", "ran", "runs\\s+on", "is\\s+on", "are\\s+on", "sits\\s+on"].join("|");
-const fabricatedHistory = new RegExp(
-  `\\b(?:our|my)\\s+(?:${historySystems})\\s+(?:${historyVerbs})\\b|${experiencePattern(["just", "already", "finally", "recently"])}`, "i",
-);
-
-// The same invention in the present tense: "Our component library renders dynamic OG
-// images from user-provided text" went into a queued post on the first live test. A claim
-// about the author's own system is framed as "if your app renders..." instead. Modals and
-// "needs" state an intention or a requirement, and a noun after the system ("our app
-// users") is not a verb, so both pass.
-const ownSystems = [
-  "codebase", "code ?base", "app", "apps", "application", "applications", "project", "projects", "stack",
-  "team", "pipeline", "pipelines", "service", "services", "product", "repo", "repository", "monorepo",
-  "library", "libraries", "components?", "frontend", "backend", "api", "site", "website", "dashboard",
-  "platform", "infrastructure", "database", "tests", "test suite", "suite", "workers?", "builds?",
-].join("|");
-const notAVerb = [
-  "as", "its", "this", "thus", "us", "plus", "across", "unless", "less", "whereas", "always", "perhaps",
-  "towards", "versus", "needs", "need", "speed", "feed", "seed", "users", "customers", "teams", "pages",
-  "routes", "endpoints", "components", "requests", "errors", "logs", "costs", "bills", "calls", "tests",
-  "builds", "files", "types", "hooks", "props", "jobs", "queries", "tables", "models", "settings",
-].join("|");
-const ownSystemClaim = new RegExp(
-  `\\b(?:our|my)\\s+(?:[a-z][\\w-]*\\s+){0,2}?(?:${ownSystems})\\s+` +
-  `(?!(?:would|could|should|might|may|will|can|must|${notAVerb})\\b)(?:[a-z]{2,}s|[a-z]{2,}ed)\\b`, "i",
-);
+export const bannedQuestionOpener = "How do you balance";
+const bannedQuestionOpening = new RegExp(`^${bannedQuestionOpener}\\b`, "i");
+const genericQuestion = /^(what do you think|thoughts|any thoughts|agree)\?$/i;
 
 // Prose paragraphs end in punctuation and sentences are separated by it. A queued post
 // on the first live test read "announced in August 2024 The same source notes..." with
@@ -83,6 +40,21 @@ const researchCommentary = /\b(?:both|the|these|those|two|three|my|our)\s+(?:sou
 // LinkedIn renders commentary as plain text; every reserved character is escaped before
 // publishing, so "* item" and "**bold**" reach the reader as typed.
 const markdownMarkup = /(?:^|\n)\s*(?:[*•#]+\s)|\s\*\s|\*\*|`/;
+
+const citationPlaceholder = /\((?:source|sources|link)\)|\[(?:source|sources|link|\d+)\]/i;
+
+// "(NVIDIA, Aug 24 2026)", "(NVIDIA, 24 Aug 2026)" and "(NVIDIA, August 2026)" are
+// citation formats nobody uses on LinkedIn.
+const month = "(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\\w*\\.?";
+const academicCitation = new RegExp(
+  `\\([A-Z][\\w.& -]{1,40},\\s*(?:${month}\\s+\\d{1,2},?\\s*\\d{4}|\\d{1,2}\\s+${month},?\\s*\\d{4}|${month}\\s+\\d{4})\\)`, "i",
+);
+
+// The prompt keeps URLs in sourceUrls, and LinkedIn linkifies anything that looks like
+// one, so a link in the body is either the model ignoring the rule or an injected
+// promotion. Handles and hashtags are not checked: escapeCommentary neutralises @ and #,
+// and scoped package names such as @tanstack/react-query are everyday vocabulary here.
+const linkOrEmail = /https?:\/\/|\bwww\.|[\w.+-]+@[\w-]+\.[a-z]{2,}/i;
 
 type RuleSettings = Pick<Config, "limits" | "persona">;
 
@@ -112,20 +84,80 @@ function avoidedTopicPattern(avoidTopics: string[]) {
   return new RegExp(`(?<!\\w)(?:${avoidTopics.map(termPattern).join("|")})\\w*`, "i");
 }
 
-// "(NVIDIA, Aug 24 2026)", "(NVIDIA, 24 Aug 2026)" and "(NVIDIA, August 2026)" are
-// citation formats nobody uses on LinkedIn.
-const month = "(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\\w*\\.?";
-const academicCitation = new RegExp(
-  `\\([A-Z][\\w.& -]{1,40},\\s*(?:${month}\\s+\\d{1,2},?\\s*\\d{4}|\\d{1,2}\\s+${month},?\\s*\\d{4}|${month}\\s+\\d{4})\\)`, "i",
-);
+// What every check reads: the post and its parts, and what it is judged against.
+type DraftParts = RuleSettings & {
+  draft: Draft;
+  text: string;
+  hook: string;
+  question: string;
+  now: Date;
+  context: DraftContext;
+};
 
-const bannedQuestionOpeners = /^how do you balance\b/i;
+// A check returns its violations, one or several, or nothing when the draft passes it.
+type Check = (parts: DraftParts) => string | string[] | undefined;
 
-// The prompt keeps URLs in sourceUrls, and LinkedIn linkifies anything that looks like
-// one, so a link in the body is either the model ignoring the rule or an injected
-// promotion. Handles and hashtags are not checked: escapeCommentary neutralises @ and #,
-// and scoped package names such as @tanstack/react-query are everyday vocabulary here.
-const linkOrEmail = /https?:\/\/|\bwww\.|[\w.+-]+@[\w-]+\.[a-z]{2,}/i;
+// The checks that are one pattern and one message. The first pattern that matches the
+// chosen part of the post is quoted back to the model.
+function patternCheck(
+  pattern: RegExp | readonly RegExp[] | ((parts: DraftParts) => RegExp | undefined),
+  message: (match: string) => string,
+  part: "text" | "hook" | "question" = "text",
+): Check {
+  return (parts) => {
+    const patterns = typeof pattern === "function" ? [pattern(parts)] : [pattern].flat();
+    for (const candidate of patterns) {
+      const match = candidate && parts[part].match(candidate);
+      if (match) return message(match[0]);
+    }
+    return undefined;
+  };
+}
+
+// In the order the violations are reported.
+const checks: Check[] = [
+  patternCheck(freshnessClaim, (match) => `Draft contains an unverified freshness claim ("${match}").`),
+  patternCheck(experienceClaim, (match) => `Hook claims personal testing or usage the evidence cannot support ("${match}"); state a decision or position instead.`, "hook"),
+  ({ hook, limits }) => hook.length > limits.maxHookLength
+    ? `Hook is ${hook.length} characters; keep it under ${limits.maxHookLength} so it is not cut before "see more" on a phone.`
+    : undefined,
+  patternCheck(/^topic:/im, () => "Draft must not contain a Topic label."),
+  // Em-dashes are the loudest generated-text tell on LinkedIn.
+  patternCheck(/[—–]/, () => "Draft contains an em-dash or en-dash; rewrite with commas or plain connectors."),
+  patternCheck(citationPlaceholder, (match) => `Draft contains a citation placeholder ("${match}"); state the publisher by name or drop the reference.`),
+  patternCheck(academicCitation, (match) => `Draft contains an inline academic citation ("${match}"); name the publisher inside the sentence instead.`),
+  patternCheck(linkOrEmail, (match) => `Draft contains a link or e-mail address ("${match}"); name the publisher in the sentence and keep URLs in sourceUrls.`),
+  patternCheck(inventedHistory, (match) => `Draft states invented history ("${match}"); say what you would do or verify, and write "if your app..." rather than describing your own system as fact.`),
+  patternCheck(researchCommentary, (match) => `Draft talks about its research ("${match}"); the reader sees the post, not the sources.`),
+  patternCheck(markdownMarkup, (match) => `Draft contains markup LinkedIn shows literally ("${match.trim() || "*"}"); write plain text with one checklist item per line and no bullet characters.`),
+  patternCheck(({ persona }) => stackCostumePattern(persona.stack), (match) => `Draft announces the stack in a paragraph opener ("${match}"); let the stack show through the decision instead.`),
+  patternCheck(({ persona }) => avoidedTopicPattern(persona.avoidTopics), (match) => `Draft makes an infrastructure decision outside the author's scale ("${match}"); write about the web app, not the hardware.`),
+  wordCountViolation,
+  ({ text }) => {
+    const unterminated = unterminatedParagraphs(text)[0];
+    return unterminated === undefined ? undefined : `A paragraph ends without a full stop ("...${lastWords(unterminated, 6)}"); end every sentence with punctuation.`;
+  },
+  patternCheck(missingSentenceBreak, (match) => `Draft runs two sentences together without a full stop ("${match}"); punctuate every sentence.`),
+  patternCheck(brokenCompound, (match) => `Draft misspells a compound word ("${match}"); write "ad hoc" and the noun "trade-off".`),
+  ({ text }) => (text.includes("\n\n") ? undefined : "Draft needs mobile-friendly paragraph spacing."),
+  ({ text }) => (text.endsWith("?") ? undefined : "Draft must end with a genuine question."),
+  patternCheck(genericQuestion, () => "Draft needs a specific closing question.", "question"),
+  patternCheck(bannedQuestionOpening, () => `Closing question opens with "${bannedQuestionOpener}"; ask about a specific trade-off in a different form.`, "question"),
+  ({ text }) => (text.length > maxPostLength ? `Draft exceeds LinkedIn's ${maxPostLength}-character limit.` : undefined),
+  ({ hook, question, context }) => varietyViolations(hook, question, context.recentPosts ?? []),
+  ({ draft, context }) => themeViolations(draft.theme, context.recentThemes ?? []),
+  ({ text }) => {
+    const spelled = spelledNumbers(text);
+    return spelled.length
+      ? `Draft spells out figures in words (${spelled.join(", ")}); write numbers as digits so they can be checked against the evidence.`
+      : undefined;
+  },
+  ({ text, context }) => {
+    const invented = context.evidence ? unsupportedNumbers(text, context.evidence) : [];
+    return invented.length ? `Draft contains numbers absent from the evidence (${invented.join(", ")}); use only figures the sources state.` : undefined;
+  },
+  ({ draft, now, limits }) => sourceViolations(draft.sources, now, limits.sourceWindowDays),
+];
 
 // Every rule is checked and every violation reported, so the one corrective attempt the
 // model gets can fix all of them at once instead of discovering them one per draft.
@@ -135,100 +167,21 @@ export function draftViolations(
   context: DraftContext = {},
   { limits, persona }: RuleSettings = config(),
 ) {
-  const violations: string[] = [];
   const text = draft.text.trim();
-  const freshness = text.match(freshnessClaim);
-  if (freshness) violations.push(`Draft contains an unverified freshness claim ("${freshness[0]}").`);
-  const hook = firstParagraph(text);
-  const experience = hook.match(experienceClaim);
-  if (experience) {
-    violations.push(`Hook claims personal testing or usage the evidence cannot support ("${experience[0]}"); state a decision or position instead.`);
-  }
-  if (hook.length > limits.maxHookLength) {
-    violations.push(`Hook is ${hook.length} characters; keep it under ${limits.maxHookLength} so it is not cut before "see more" on a phone.`);
-  }
-  if (/^topic:/im.test(text)) violations.push("Draft must not contain a Topic label.");
-  // Em-dashes are the loudest generated-text tell on LinkedIn.
-  if (/[—–]/.test(text)) violations.push("Draft contains an em-dash or en-dash; rewrite with commas or plain connectors.");
-  const placeholder = text.match(/\((?:source|sources|link)\)|\[(?:source|sources|link|\d+)\]/i);
-  if (placeholder) {
-    violations.push(`Draft contains a citation placeholder ("${placeholder[0]}"); state the publisher by name or drop the reference.`);
-  }
-  const citation = text.match(academicCitation);
-  if (citation) {
-    violations.push(`Draft contains an inline academic citation ("${citation[0]}"); name the publisher inside the sentence instead.`);
-  }
-  const link = text.match(linkOrEmail);
-  if (link) {
-    violations.push(`Draft contains a link or e-mail address ("${link[0]}"); name the publisher in the sentence and keep URLs in sourceUrls.`);
-  }
-  const history = text.match(fabricatedHistory) ?? text.match(ownSystemClaim);
-  if (history) {
-    violations.push(`Draft states invented history ("${history[0]}"); say what you would do or verify, and write "if your app..." rather than describing your own system as fact.`);
-  }
-  const commentary = text.match(researchCommentary);
-  if (commentary) {
-    violations.push(`Draft talks about its research ("${commentary[0]}"); the reader sees the post, not the sources.`);
-  }
-  const markup = text.match(markdownMarkup);
-  if (markup) {
-    violations.push(`Draft contains markup LinkedIn shows literally ("${markup[0].trim() || "*"}"); write plain text with one checklist item per line and no bullet characters.`);
-  }
-  const costume = text.match(stackCostumePattern(persona.stack));
-  if (costume) {
-    violations.push(`Draft announces the stack in a paragraph opener ("${costume[0]}"); let the stack show through the decision instead.`);
-  }
-  const avoided = avoidedTopicPattern(persona.avoidTopics);
-  const scale = avoided ? text.match(avoided) : null;
-  if (scale) {
-    violations.push(`Draft makes an infrastructure decision outside the author's scale ("${scale[0]}"); write about the web app, not the hardware.`);
-  }
+  const parts: DraftParts = { draft, text, hook: firstParagraph(text), question: lastParagraph(text), now, context, limits, persona };
+  return checks.flatMap((check) => check(parts) ?? []);
+}
+
+// The bare range was not enough: a corrected draft came back at 133 words against a
+// floor of 140. The model is told how far to move and toward the middle, not the edge.
+function wordCountViolation({ text, limits }: DraftParts) {
   const words = text.split(/\s+/).length;
-  if (words < limits.minWords || words > limits.maxWords) {
-    // The bare range was not enough: a corrected draft came back at 133 words against a
-    // floor of 140. The model is told how far to move and toward the middle, not the edge.
-    const target = wordTarget(limits);
-    const fix = words < limits.minWords
-      ? `Add about ${target - words} words, for example one more concrete sentence in the context or insight paragraph.`
-      : `Cut about ${words - target} words.`;
-    violations.push(`Draft must contain ${limits.minWords} to ${limits.maxWords} words; received ${words}. ${fix}`);
-  }
-  const unterminated = unterminatedParagraphs(text);
-  if (unterminated.length) {
-    violations.push(`A paragraph ends without a full stop ("...${lastWords(unterminated[0]!, 6)}"); end every sentence with punctuation.`);
-  }
-  const runOn = text.match(missingSentenceBreak);
-  if (runOn) {
-    violations.push(`Draft runs two sentences together without a full stop ("${runOn[0]}"); punctuate every sentence.`);
-  }
-  const compound = text.match(brokenCompound);
-  if (compound) {
-    violations.push(`Draft misspells a compound word ("${compound[0]}"); write "ad hoc" and the noun "trade-off".`);
-  }
-  if (!text.includes("\n\n")) violations.push("Draft needs mobile-friendly paragraph spacing.");
-  if (!text.endsWith("?")) violations.push("Draft must end with a genuine question.");
-  const closingQuestion = lastParagraph(text);
-  if (/^(what do you think|thoughts|any thoughts|agree)\?$/i.test(closingQuestion)) {
-    violations.push("Draft needs a specific closing question.");
-  }
-  if (bannedQuestionOpeners.test(closingQuestion)) {
-    violations.push('Closing question opens with "How do you balance"; ask about a specific trade-off in a different form.');
-  }
-  if (text.length > maxPostLength) violations.push(`Draft exceeds LinkedIn's ${maxPostLength}-character limit.`);
-  violations.push(...varietyViolations(hook, closingQuestion, context.recentPosts ?? []));
-  violations.push(...themeViolations(draft.theme, context.recentThemes ?? []));
-  const spelled = spelledNumbers(text);
-  if (spelled.length) {
-    violations.push(`Draft spells out figures in words (${spelled.join(", ")}); write numbers as digits so they can be checked against the evidence.`);
-  }
-  if (context.evidence) {
-    const invented = unsupportedNumbers(text, context.evidence);
-    if (invented.length) {
-      violations.push(`Draft contains numbers absent from the evidence (${invented.join(", ")}); use only figures the sources state.`);
-    }
-  }
-  violations.push(...sourceViolations(draft.sources, now, limits.sourceWindowDays));
-  return violations;
+  if (words >= limits.minWords && words <= limits.maxWords) return undefined;
+  const target = wordTarget(limits);
+  const fix = words < limits.minWords
+    ? `Add about ${target - words} words, for example one more concrete sentence in the context or insight paragraph.`
+    : `Cut about ${words - target} words.`;
+  return `Draft must contain ${limits.minWords} to ${limits.maxWords} words; received ${words}. ${fix}`;
 }
 
 // Banning phrases one at a time never holds: the model finds the next groove. Comparing
