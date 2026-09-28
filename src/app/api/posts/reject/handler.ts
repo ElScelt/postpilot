@@ -21,7 +21,19 @@ export async function handleReviewPage(request: NextRequest, overrides: Partial<
   const deps = { ...productionDeps, ...overrides };
   const id = rejectTarget(request);
   if (!id) return invalidLinkPage();
-  const post = (await deps.listPosts()).find((entry) => entry.id === id);
+  let posts;
+  try {
+    posts = await deps.listPosts();
+  } catch (error) {
+    // The Reject button stays: a storage hiccup must not stand between the owner and
+    // stopping the post, and the POST reports its own failure if it cannot get through.
+    console.error("Review page could not load the draft:", errorMessage(error));
+    return page("Draft unavailable", `
+      <h1>The draft could not be loaded</h1>
+      <p>Reload to try again. You can still reject it without reading it.</p>
+      ${rejectForm(request, "Reject this post")}`, 500);
+  }
+  const post = posts.find((entry) => entry.id === id);
   if (!post) return page("Not found", "<h1>That post no longer exists</h1>");
   if (post.status !== "queued") return alreadyHandledPage(post.status);
   const meta = post.automation

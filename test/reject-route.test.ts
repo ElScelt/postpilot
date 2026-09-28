@@ -93,3 +93,13 @@ test("a post being published is too late to reject, and the page says so", async
   assert.match(review, /being published/);
   assert.doesNotMatch(review, /<form/, "no Reject button for a post already on its way");
 });
+
+test("a review page that cannot load the draft says so and offers Reject anyway", async () => {
+  const { deps } = fakes();
+  deps.listPosts = async () => { throw new Error("fetch failed"); };
+  const response = await handleReviewPage(reviewRequest("p1", "GET"), deps);
+  assert.equal(response.status, 500);
+  const html = await response.text();
+  assert.match(html, /could not be loaded/);
+  assert.match(html, /<form method="post"/, "rejecting must not depend on reading the draft first");
+});
