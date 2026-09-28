@@ -1,6 +1,6 @@
 {
   "name": "postpilot",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Self-hosted autopilot for LinkedIn posts: researches recent sources, drafts a grounded post overnight, and publishes it in the morning unless you reject it from your phone.",
   "private": true,
   "license": "MIT",
