@@ -1,7 +1,7 @@
 import { config, type Config } from "../config";
 import { meetsEvidenceBar } from "../research/sources";
 import { recentDays } from "../scheduling/time";
-import { maxPostLength } from "../linkedin/api";
+import { maxPostLength } from "../limits";
 import { spelledNumbers, unsupportedNumbers } from "./numbers";
 import type { Draft, DraftContext, ResearchSource } from "./types";
 

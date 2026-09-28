@@ -1,5 +1,6 @@
 import { config, weekdays, type Config } from "../config";
-import { automationUrl, qstash, runRetries } from "./qstash";
+import { automationUrl, qstash } from "./qstash";
+import { runRetries } from "../limits";
 import { dayMs, localParts, localTimeToUtc } from "./time";
 
 type ScheduleSettings = Pick<Config, "timeZone" | "schedule">;

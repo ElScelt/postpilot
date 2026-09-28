@@ -1,7 +1,7 @@
 import type { SetupCheck } from "@/lib/setup-check";
 import type { QueuedPost } from "@/lib/storage/posts";
 import type { AutomationRun } from "@/lib/storage/runs";
-import { maxPostLength } from "@/lib/linkedin/api";
+import { maxPostLength } from "@/lib/limits";
 import { formatDateTime, formatDay } from "@/lib/scheduling/time";
 import { EditForm, RejectForm } from "./forms";
 import { levelColor, styles, type Tone } from "./styles";

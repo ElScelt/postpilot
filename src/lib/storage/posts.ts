@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { versionedStore, type VersionedStore } from "./redis";
-import { deliveryTimestamp, publishRetries, publishTimeLimitSeconds, qstash, publishingUrl } from "../scheduling/qstash";
+import { deliveryTimestamp, qstash, publishingUrl } from "../scheduling/qstash";
+import { maxPostLength, publishRetries, publishTimeLimitSeconds } from "../limits";
 import type { ResearchSource } from "../drafting/types";
 import { errorMessage } from "../errors";
-import { maxPostLength } from "../linkedin/api";
 
 export type AutomationMetadata = {
   topic: string;

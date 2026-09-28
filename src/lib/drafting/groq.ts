@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { envValue, required } from "../env";
-import { sleep } from "../scheduling/time";
+import { sleep } from "../async";
 
 export const groqEndpoint = "https://api.groq.com/openai/v1/chat/completions";
 

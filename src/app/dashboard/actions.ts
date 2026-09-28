@@ -4,7 +4,8 @@ import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { authorizeDashboard } from "@/lib/security/dashboard-auth";
 import { cancelPost, editPostText } from "@/lib/storage/posts";
-import { automationUrl, qstash, runRetries } from "@/lib/scheduling/qstash";
+import { automationUrl, qstash } from "@/lib/scheduling/qstash";
+import { runRetries } from "@/lib/limits";
 import { errorMessage } from "@/lib/errors";
 
 // The proxy already gates /dashboard, but a server action is a POST to a URL, so each

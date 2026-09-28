@@ -5,7 +5,7 @@ import { draftViolations } from "./rules";
 import type { DraftContext } from "./types";
 import type { ResearchResult } from "../research/tavily";
 import { meetsEvidenceBar } from "../research/sources";
-import { sleep } from "../scheduling/time";
+import { sleep } from "../async";
 import { errorMessage } from "../errors";
 
 export type PostedDecision = Extract<DraftDecision, { shouldPost: true }>;

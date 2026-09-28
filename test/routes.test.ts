@@ -6,7 +6,7 @@ import * as reject from "../src/app/api/posts/reject/route";
 import * as callback from "../src/app/api/auth/linkedin/callback/route";
 import * as connect from "../src/app/api/auth/linkedin/route";
 import { validState } from "../src/lib/linkedin/oauth";
-import { publishTimeLimitSeconds, runTimeLimitSeconds } from "../src/lib/scheduling/qstash";
+import { publishTimeLimitSeconds, runTimeLimitSeconds } from "../src/lib/limits";
 
 // The route files only wire Next to the handlers the other suites test. This checks the
 // wiring: the methods each route answers, and the time limits Next reads from them.

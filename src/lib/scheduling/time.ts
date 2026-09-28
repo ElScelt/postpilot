@@ -37,10 +37,6 @@ export function dayIndex(date: Date) {
   return Math.floor(date.getTime() / dayMs);
 }
 
-export function sleep(milliseconds: number) {
-  return new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
-}
-
 export function formatDateTime(value: string | number | Date, timeZone = config().timeZone) {
   return formats(timeZone).dateTime.format(new Date(value));
 }

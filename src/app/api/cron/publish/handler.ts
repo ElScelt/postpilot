@@ -5,7 +5,8 @@ import { LinkedInPublishError, publishTextPost } from "@/lib/linkedin/api";
 import { connectUrl } from "@/lib/linkedin/oauth";
 import { notifyOperator } from "@/lib/notify/ntfy";
 import { authorizeQStashRequest, verifyQStashSignature } from "@/lib/security/request-auth";
-import { deliveryAttempt, publishRetries } from "@/lib/scheduling/qstash";
+import { deliveryAttempt } from "@/lib/scheduling/qstash";
+import { publishRetries } from "@/lib/limits";
 import { formatDateTime } from "@/lib/scheduling/time";
 import { errorMessage } from "@/lib/errors";
 

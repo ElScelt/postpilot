@@ -8,7 +8,7 @@ import { notifyDraftQueued, notifyOperator } from "./notify/ntfy";
 import { appUrl, envValue } from "./env";
 import { connectUrl } from "./linkedin/oauth";
 import { acquireRunLock, releaseRunLock } from "./storage/run-lock";
-import { runTimeLimitSeconds } from "./scheduling/qstash";
+import { runTimeLimitSeconds } from "./limits";
 import { dayMs, formatDateTime } from "./scheduling/time";
 import type { RecentActivity } from "./drafting/prompt";
 import { errorMessage } from "./errors";

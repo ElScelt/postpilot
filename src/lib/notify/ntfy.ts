@@ -1,4 +1,5 @@
-import { formatDateTime, sleep } from "../scheduling/time";
+import { formatDateTime } from "../scheduling/time";
+import { sleep } from "../async";
 import { rejectToken } from "../security/reject-token";
 import { envValue } from "../env";
 import { errorMessage } from "../errors";

@@ -62,9 +62,6 @@ export async function loadLinkedInToken(client: TokenReader = redis()): Promise<
   return result.data;
 }
 
-// LinkedIn's limit on the text of a post.
-export const maxPostLength = 3000;
-
 // How early the run alerts and the dashboard warns that the authorization is running out:
 // enough notice to reconnect on a convenient evening.
 export const reconnectWarningDays = 10;

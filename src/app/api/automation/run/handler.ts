@@ -7,7 +7,8 @@ import { DraftRejectedError } from "@/lib/drafting/pipeline";
 import { pingHeartbeat } from "@/lib/notify/heartbeat";
 import { notifyOperator } from "@/lib/notify/ntfy";
 import { errorMessage } from "@/lib/errors";
-import { deliveryAttempt, runRetries } from "@/lib/scheduling/qstash";
+import { deliveryAttempt } from "@/lib/scheduling/qstash";
+import { runRetries } from "@/lib/limits";
 
 // Everything the run route calls, injectable so tests drive the handler with fakes.
 // route.ts may only export route fields, which is why this lives beside it.
