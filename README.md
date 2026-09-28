@@ -65,7 +65,7 @@ For local development you need Node.js 22.9 or newer; `.nvmrc` pins 22.
 
 ## Setup and deploy
 
-1. **Fork or clone this repository** and push it to your own GitHub account. CI runs lint, typecheck, tests, an offline draft and a production dependency audit on every push.
+1. **Fork or clone this repository** and push it to your own GitHub account. CI runs lint, typecheck, tests, an offline draft, the production build and a production dependency audit on every push.
 2. **Edit `postpilot.config.ts`.** At minimum set `timeZone`, `persona.role` and your `themes` (see [Configuration](#configuration)). Run `npm ci && npm test` to check that it is valid.
 3. **Create the LinkedIn app.** In the [developer portal](https://www.linkedin.com/developers/apps), create an app and, on its Products tab, add both **Share on LinkedIn** and **Sign In with LinkedIn using OpenID Connect**. If either is missing, the consent screen fails with a scope error.
 4. **Import the repository into Vercel.** Under Project Settings → Functions, check that **Fluid compute** is enabled (it is the default for new projects). Importing from the dashboard detects Next.js; a project created with `vercel project add` has no framework preset, so set it to Next.js under Project Settings → Build and Deployment or the first deploy fails looking for a `public` directory.

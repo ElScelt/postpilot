@@ -24,4 +24,5 @@ jobs:
       - run: npm test
       - name: Offline draft
         run: npm run draft -- --offline
+      - run: npm run build
       - run: npm audit --omit=dev --audit-level=high

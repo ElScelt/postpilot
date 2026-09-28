@@ -22,10 +22,11 @@ npm run lint
 npm run typecheck
 npm test
 npm run draft -- --offline
+npm run build
+npm audit --omit=dev
 ```
 
-- `npm run test:coverage` prints a coverage report.
-- `npm run build` checks the production build.
+`npm run build` is the only check that validates what route files export, so run it before pushing a change under `src/app`. `npm run test:coverage` prints a coverage report.
 
 ## Pull requests
 
