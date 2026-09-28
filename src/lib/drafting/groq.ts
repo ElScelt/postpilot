@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { required } from "../env";
+import { envValue, required } from "../env";
 import { sleep } from "../scheduling/time";
 
 export const groqEndpoint = "https://api.groq.com/openai/v1/chat/completions";
@@ -10,7 +10,7 @@ export const supportedGroqModels = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"]
 export const defaultGroqModel: (typeof supportedGroqModels)[number] = "openai/gpt-oss-120b";
 
 export function groqModel() {
-  const model = process.env.GROQ_MODEL ?? defaultGroqModel;
+  const model = envValue("GROQ_MODEL") ?? defaultGroqModel;
   if (!(supportedGroqModels as readonly string[]).includes(model)) {
     throw new Error(`GROQ_MODEL must be one of ${supportedGroqModels.join(", ")}; received "${model}".`);
   }

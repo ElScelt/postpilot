@@ -1,5 +1,6 @@
 import { formatDateTime, sleep } from "../scheduling/time";
 import { rejectToken } from "../security/reject-token";
+import { envValue } from "../env";
 import { errorMessage } from "../errors";
 
 export type NtfyMessage = {
@@ -26,8 +27,9 @@ export function ntfyRequest(message: NtfyMessage) {
   if (message.tags) headers.Tags = message.tags;
   if (message.click) headers.Click = message.click;
   if (message.actions?.length) headers.Actions = message.actions.join("; ");
-  if (process.env.NTFY_TOKEN) headers.Authorization = `Bearer ${process.env.NTFY_TOKEN}`;
-  const base = (process.env.NTFY_URL ?? "https://ntfy.sh").replace(/\/$/, "");
+  const token = envValue("NTFY_TOKEN");
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const base = (envValue("NTFY_URL") ?? "https://ntfy.sh").replace(/\/$/, "");
   return {
     url: `${base}/${message.topic}`,
     init: { method: "POST", headers, body: message.body } satisfies RequestInit,
@@ -116,7 +118,7 @@ export type OperatorAlert = {
 
 export async function notifyOperator(
   alert: OperatorAlert,
-  topic = process.env.NTFY_TOPIC,
+  topic = envValue("NTFY_TOPIC"),
   fetcher: typeof fetch = fetch,
 ) {
   if (!topic) return false;

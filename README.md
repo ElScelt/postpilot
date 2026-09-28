@@ -75,7 +75,7 @@ For local development you need Node.js 22.9 or newer; `.nvmrc` pins 22.
    - `LINKEDIN_REDIRECT_URI`: `https://YOUR-DOMAIN/api/auth/linkedin/callback`.
    - `LINKEDIN_STATE_SECRET`, `AUTOMATION_SECRET`, `NTFY_TOPIC`: three different long random strings, for example from three runs of `openssl rand -hex 32`.
 
-   Vercel reads variables at deploy time, so redeploy after changing any of them. Paste values without a trailing newline or carriage return: a value copied from a file saved with Windows line endings keeps an invisible ``, and the dashboard password or a signature check then fails.
+   Vercel reads variables at deploy time, so redeploy after changing any of them. Whitespace around a value is ignored, including the invisible `\r` a value copied from a file with Windows line endings carries, and a variable left blank counts as unset.
 7. **Register the callback URL.** On the LinkedIn app's Auth tab, add `https://YOUR-DOMAIN/api/auth/linkedin/callback` under Authorized redirect URLs.
 8. **Connect LinkedIn.** Open `https://YOUR-DOMAIN/api/auth/linkedin` and approve the consent screen. The callback page shows your member id and when the authorization expires. Set `LINKEDIN_MEMBER_ID` to that id and redeploy, so nobody else can rebind the deployment.
 9. **Subscribe to your topic.** Install the ntfy app and subscribe to the `NTFY_TOPIC` value.
@@ -266,7 +266,6 @@ On the dashboard's run history: every rejected draft is listed next to the rule 
 | "A LinkedIn post may or may not have gone out" | A publish was cut off mid-call and no later delivery settled it, so the evening run retired it. | Look for the post on LinkedIn; post it by hand only if it is missing. |
 | "LinkedIn published the post, but its record was not updated" | LinkedIn has the post, but Redis could not record it. | Nothing: the post went out. The alert names its LinkedIn id. |
 | "Reject failed, try again" | Redis could not be reached, so the post is still queued. | Tap **Try again**. If it keeps failing, check Upstash's status and reject from the dashboard once it is back. |
-| The dashboard rejects the right password | The `AUTOMATION_SECRET` value was saved with a trailing `` or newline. | Set the variable again without it and redeploy. |
 | "The run could not start" | Every QStash delivery found another run for the same morning holding the lock. | Check the dashboard for tonight's post; if there is none, press **Run now**. |
 | Silence on a run night | The run never fired, or ntfy is down. | healthchecks.io pages you if configured. Otherwise check the QStash console and the Vercel function logs. |
 

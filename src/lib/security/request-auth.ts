@@ -1,5 +1,5 @@
 import { Receiver } from "@upstash/qstash";
-import { required } from "../env";
+import { envValue, required } from "../env";
 import { constantTimeEqual } from "./compare";
 import { errorMessage } from "../errors";
 
@@ -34,7 +34,7 @@ export async function authorizeRunRequest(
   verifySignature?: SignatureVerifier,
 ) {
   if (isQStashSigned(request)) return authorizeQStashRequest(request, body, verifySignature);
-  const secret = process.env.AUTOMATION_SECRET;
+  const secret = envValue("AUTOMATION_SECRET");
   return Boolean(secret) && constantTimeEqual(request.headers.get("authorization") ?? "", `Bearer ${secret}`);
 }
 

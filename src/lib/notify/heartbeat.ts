@@ -1,4 +1,5 @@
 import { errorMessage } from "../errors";
+import { envValue } from "../env";
 
 // A dead-man's switch for the run itself. Alerts can only fire from a run that started;
 // a deleted schedule, rotated signing keys or a broken deploy produce silence. Pointing
@@ -6,7 +7,7 @@ import { errorMessage } from "../errors";
 // that silence into a push. Optional, and never allowed to affect the run.
 export async function pingHeartbeat(
   ok: boolean,
-  url = process.env.HEALTHCHECK_URL,
+  url = envValue("HEALTHCHECK_URL"),
   fetcher: typeof fetch = fetch,
 ) {
   if (!url) return false;

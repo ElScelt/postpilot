@@ -49,6 +49,14 @@ test("refuses a model override that would silently lose strict output", () => {
   assert.equal(groqModel(), defaultGroqModel);
 });
 
+test("a model variable left blank means the default, and stray whitespace is ignored", (t) => {
+  t.after(() => { delete process.env.GROQ_MODEL; });
+  process.env.GROQ_MODEL = "";
+  assert.equal(groqModel(), defaultGroqModel);
+  process.env.GROQ_MODEL = "openai/gpt-oss-20b\r\n";
+  assert.equal(groqModel(), "openai/gpt-oss-20b");
+});
+
 test("includes validation feedback and the failed draft in a corrected request", () => {
   const request = draftRequest({
     feedback: "Draft contains an unverified freshness claim.", theme: "frontend", failedDraft: "The failed draft text.",

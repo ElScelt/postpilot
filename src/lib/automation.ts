@@ -5,7 +5,7 @@ import { recordAutomationRun } from "./storage/runs";
 import { reconcileAutomationSchedules } from "./scheduling/schedules";
 import { linkedInTokenStatus } from "./linkedin/api";
 import { notifyDraftQueued, notifyOperator } from "./notify/ntfy";
-import { appUrl } from "./env";
+import { appUrl, envValue } from "./env";
 import { connectUrl } from "./linkedin/oauth";
 import { acquireRunLock, releaseRunLock } from "./storage/run-lock";
 import { runTimeLimitSeconds } from "./scheduling/qstash";
@@ -208,7 +208,7 @@ export async function runAutomation(
       theme: decision.theme,
       sources: decision.sources,
     });
-    const topic = process.env.NTFY_TOPIC;
+    const topic = envValue("NTFY_TOPIC");
     if (!topic) {
       warnings.push("NTFY_TOPIC is unset, so the draft publishes without review.");
     } else if (!(await deps.notifyDraftQueued({

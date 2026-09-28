@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { checkSetup, requiredVariables } from "../src/lib/setup-check";
+import { checkSetup } from "../src/lib/setup-check";
+import { requiredVariables } from "../src/lib/env";
 
 const complete: Record<string, string> = {
   ...Object.fromEntries(requiredVariables.map((name) => [name, "x"])),

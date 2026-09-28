@@ -1,4 +1,5 @@
 import { Redis } from "@upstash/redis";
+import { envValue, type Environment } from "../env";
 
 // The two operations the stores need, so tests can supply a plain in-memory fake.
 export type KeyValueStore = {
@@ -9,9 +10,9 @@ export type KeyValueStore = {
 // The Upstash integration in the Vercel marketplace names its variables KV_REST_API_URL
 // and KV_REST_API_TOKEN; a database created in the Upstash console uses the
 // UPSTASH_REDIS_REST_ names. Either pair works, and the Upstash names win when both exist.
-export function redisCredentials(env: Partial<Record<string, string>> = process.env) {
-  const url = env.UPSTASH_REDIS_REST_URL?.trim() || env.KV_REST_API_URL?.trim();
-  const token = env.UPSTASH_REDIS_REST_TOKEN?.trim() || env.KV_REST_API_TOKEN?.trim();
+export function redisCredentials(env: Environment = process.env) {
+  const url = envValue("UPSTASH_REDIS_REST_URL", env) ?? envValue("KV_REST_API_URL", env);
+  const token = envValue("UPSTASH_REDIS_REST_TOKEN", env) ?? envValue("KV_REST_API_TOKEN", env);
   return url && token ? { url, token } : undefined;
 }
 

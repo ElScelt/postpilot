@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { validState } from "@/lib/linkedin/oauth";
-import { required } from "@/lib/env";
+import { envValue, required } from "@/lib/env";
 import { loadLinkedInToken, saveLinkedInToken } from "@/lib/linkedin/api";
 import { formatDay } from "@/lib/scheduling/time";
 
@@ -50,7 +50,7 @@ export async function handleLinkedInCallback(request: NextRequest, overrides: Pa
   // The consent flow is reachable by any LinkedIn member who finds the URL, and whoever
   // completes it would become the author of every queued post. Bind the deployment to
   // one member: the configured id, or failing that the member who connected first.
-  const owner = process.env.LINKEDIN_MEMBER_ID || (await deps.loadLinkedInToken())?.memberId;
+  const owner = envValue("LINKEDIN_MEMBER_ID") ?? (await deps.loadLinkedInToken())?.memberId;
   if (owner && profile.sub !== owner) {
     return new NextResponse("This deployment is bound to another LinkedIn member.", { status: 403 });
   }

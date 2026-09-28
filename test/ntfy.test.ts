@@ -104,6 +104,15 @@ test("a self-hosted server and an access token are honoured when configured", (t
   assert.equal((init.headers as Record<string, string>).Authorization, "Bearer tk_abc");
 });
 
+test("a server or token left blank falls back to ntfy.sh without a token", (t) => {
+  process.env.NTFY_URL = "";
+  process.env.NTFY_TOKEN = " \r";
+  t.after(() => { delete process.env.NTFY_URL; delete process.env.NTFY_TOKEN; });
+  const { url, init } = ntfyRequest(draftMessage(notice));
+  assert.equal(url, "https://ntfy.sh/secret-topic");
+  assert.equal((init.headers as Record<string, string>).Authorization, undefined);
+});
+
 test("a hung ntfy request is abandoned rather than holding the run", async () => {
   let signal: AbortSignal | null | undefined;
   await sendNtfy({ topic: "t", title: "x", body: "y" }, async (_input, init) => { signal = init?.signal; return new Response("ok"); });
