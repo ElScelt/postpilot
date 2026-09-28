@@ -71,17 +71,21 @@ export type DraftRequest = {
   compact?: boolean;
 };
 
-type PromptSettings = Pick<Config, "limits" | "persona">;
+type PromptSettings = Pick<Config, "limits" | "persona" | "themes">;
+
+// Reasoning and answer share this budget. 2,500 was exhausted by reasoning alone on the
+// first night it ran, and at 2,500 the review's medium reasoning used it all before the
+// JSON; the request stays under the per-minute limit at 3,000 now that the evidence is
+// shorter. The review sends the draft back in the same shape, so it gets the same budget.
+export const completionTokens = 3000;
 
 export function buildDraftRequest(request: DraftRequest, settings: PromptSettings = config()): RequestInit {
   return groqRequest({
     prompt: generationPrompt(request, settings),
     // One post a night; the extra thinking is worth more than the tokens it costs.
     reasoning: request.reasoning ?? "medium",
-    // 2,500 was exhausted by reasoning alone on the first night it ran, and the request
-    // stays under the per-minute limit at 3,000 now that the evidence is shorter.
-    maxTokens: 3000,
-    responseFormat: draftResponseFormat(),
+    maxTokens: completionTokens,
+    responseFormat: draftResponseFormat(themeIds(settings.themes)),
   });
 }
 
@@ -129,7 +133,7 @@ const takeawayForms = [
 // own word lists and limits so the three cannot drift apart. LinkedIn folds a post after
 // roughly 140 characters on a phone, so the prompt asks for a hook of about three
 // quarters of the validator's limit; the slack spares the one corrective attempt.
-export function hardRules({ limits, persona }: PromptSettings = config()) {
+export function hardRules({ limits, persona }: Pick<Config, "limits" | "persona"> = config()) {
   const hookCharacters = Math.round(limits.maxHookLength * 0.75);
   const hookWords = Math.round(hookCharacters / 6.7);
   const stackOpener = persona.stack.length
@@ -182,7 +186,7 @@ function generationPrompt({
   const day = dayIndex(now);
   const hookForm = hookForms[day % hookForms.length];
   const takeawayForm = takeawayForms[day % takeawayForms.length];
-  const brief = themeDefinition(theme);
+  const brief = themeDefinition(theme, settings.themes);
   const persona = personaBrief(settings.persona);
   const correction = feedback
     ? `A previous draft failed validation: ${feedback}${failedDraft ? ` Here is the draft that failed:\n<draft>\n${failedDraft}\n</draft>\nRewrite it, fixing exactly those problems and keeping the story and the figures the evidence supports.` : " Correct that failure."}`

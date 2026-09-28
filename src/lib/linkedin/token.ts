@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { redis, type KeyValueStore } from "../storage/redis";
 import { dayMs } from "../scheduling/time";
+import { connectPath } from "./oauth";
 
 export type TokenReader = Pick<KeyValueStore, "get">;
 
@@ -48,7 +49,7 @@ export async function linkedInTokenStatus(now = Date.now(), client: TokenReader 
 
 export async function requireToken(client: TokenReader = redis()) {
   const token = await loadLinkedInToken(client);
-  if (!token) throw new Error("LinkedIn is not connected. Visit /api/auth/linkedin first.");
+  if (!token) throw new Error(`LinkedIn is not connected. Visit ${connectPath} first.`);
   if (token.expiresAt <= Date.now()) throw new Error("LinkedIn authorization expired. Reconnect LinkedIn.");
   return token;
 }

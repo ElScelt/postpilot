@@ -7,7 +7,7 @@ import { reconcileAutomationSchedules } from "./scheduling/schedules";
 import { linkedInTokenStatus, reconnectWarningDays } from "./linkedin/token";
 import { notifyDraftQueued, notifyOperator } from "./notify/ntfy";
 import { appUrl, envValue } from "./env";
-import { connectUrl } from "./linkedin/oauth";
+import { connectPath, connectUrl } from "./linkedin/oauth";
 import { acquireRunLock, releaseRunLock } from "./storage/run-lock";
 import { runTimeLimitSeconds } from "./limits";
 import { dayMs, formatDateTime } from "./scheduling/time";
@@ -50,8 +50,9 @@ export type RunOptions = {
   finalAttempt?: boolean;
 };
 
-const reconnect = "Reconnect at /api/auth/linkedin.";
+const reconnect = `Reconnect at ${connectPath}.`;
 const recentWindowMs = 14 * dayMs;
+const publishRetryWindowMs = 60 * 60 * 1000;
 
 // One run as the steps below see it. Whichever step ends the run, its record carries the
 // warnings gathered so far and the time spent.
@@ -178,9 +179,10 @@ async function checkAuthorization(run: Run) {
   }
 
   // The post goes out twelve hours after this check, so judge the token against the
-  // publish instant. The draft still queues: an overnight reconnect saves it, whereas
-  // refusing the run would forfeit the night outright.
-  const atPublish = await deps.linkedInTokenStatus(scheduledFor.getTime() + 60 * 60 * 1000);
+  // publish instant, plus an hour for QStash's retries of the publish, the last of which
+  // lands about half an hour after the first. The draft still queues: an overnight
+  // reconnect saves it, whereas refusing the run would forfeit the night outright.
+  const atPublish = await deps.linkedInTokenStatus(scheduledFor.getTime() + publishRetryWindowMs);
   if (atPublish.state !== "valid") {
     warnings.push(`LinkedIn authorization expires before the ${formatDateTime(scheduledFor)} publish. ${reconnect}`);
     await deps.notifyOperator({

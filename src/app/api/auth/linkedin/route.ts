@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { signedState } from "@/lib/linkedin/oauth";
+import { oauthStateCookie, signedState } from "@/lib/linkedin/oauth";
 import { required } from "@/lib/env";
 
 export async function GET() {
@@ -12,6 +12,6 @@ export async function GET() {
     scope: "openid profile w_member_social",
   });
   const response = NextResponse.redirect(`https://www.linkedin.com/oauth/v2/authorization?${params}`);
-  response.cookies.set("postpilot_oauth_state", state, { httpOnly: true, secure: true, sameSite: "lax", maxAge: 600, path: "/" });
+  response.cookies.set(oauthStateCookie, state, { httpOnly: true, secure: true, sameSite: "lax", maxAge: 600, path: "/" });
   return response;
 }

@@ -2,9 +2,14 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { appUrl, required } from "../env";
 
 // Where the owner (re)connects LinkedIn: the consent flow's entry point.
+export const connectPath = "/api/auth/linkedin";
+
 export function connectUrl() {
-  return `${appUrl()}/api/auth/linkedin`;
+  return `${appUrl()}${connectPath}`;
 }
+
+// Holds the signed state between the redirect to LinkedIn and the callback.
+export const oauthStateCookie = "postpilot_oauth_state";
 
 export function signedState() {
   const nonce = randomBytes(24).toString("hex");

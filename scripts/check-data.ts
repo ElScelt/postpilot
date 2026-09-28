@@ -6,13 +6,16 @@
 //
 // The report holds counts, statuses and field names, never a post's text or a token.
 import { redis, versionedStore } from "../src/lib/storage/redis";
+import { queueKey } from "../src/lib/storage/posts";
+import { runsKey } from "../src/lib/storage/runs";
+import { tokenKey } from "../src/lib/linkedin/token";
 import { errorMessage } from "../src/lib/errors";
 import { checkStoredData } from "./stored-data";
 
 async function main() {
   const client = redis();
   const [posts, runs, token] = await Promise.all([
-    versionedStore().getRaw("postpilot:posts"), client.get("postpilot:runs"), client.get("postpilot:token"),
+    versionedStore().getRaw(queueKey), client.get(runsKey), client.get(tokenKey),
   ]);
   const reports = checkStoredData({ posts, runs, token });
   for (const report of reports) {

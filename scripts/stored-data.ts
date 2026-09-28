@@ -1,7 +1,7 @@
 import type { z } from "zod";
-import { postSchema } from "../src/lib/storage/posts";
-import { runSchema } from "../src/lib/storage/runs";
-import { tokenSchema } from "../src/lib/linkedin/token";
+import { postSchema, queueKey } from "../src/lib/storage/posts";
+import { runSchema, runsKey } from "../src/lib/storage/runs";
+import { tokenKey, tokenSchema } from "../src/lib/linkedin/token";
 
 // What a deployment holds in Redis, as the app reads it: the queue as its raw JSON
 // string, the runs and the token as the deserialising client returns them.
@@ -28,9 +28,9 @@ export function checkStoredData(data: StoredData): KeyReport[] {
   } catch {
     postsProblem = "not valid JSON";
   }
-  const postsReport = checkList("postpilot:posts", posts, postSchema);
+  const postsReport = checkList(queueKey, posts, postSchema);
   if (postsProblem) postsReport.problems.push(postsProblem);
-  return [postsReport, checkList("postpilot:runs", data.runs, runSchema), checkList("postpilot:token", data.token, tokenSchema, false)];
+  return [postsReport, checkList(runsKey, data.runs, runSchema), checkList(tokenKey, data.token, tokenSchema, false)];
 }
 
 function checkList(key: string, value: unknown, schema: z.ZodObject, isList = true): KeyReport {

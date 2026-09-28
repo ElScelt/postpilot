@@ -58,10 +58,7 @@ export async function searchThemeEvidence(
       console.error(`Tavily ${pass.topic} search over ${pass.includeDomains.length} domains failed:`, errorMessage(error));
       continue;
     }
-    for (const result of results) {
-      const key = normalizeUrl(result.url);
-      if (!merged.has(key)) merged.set(key, result);
-    }
+    mergeByUrl(merged, results);
     if (meetsEvidenceBar([...merged.values()].map((result) => result.url))) break;
   }
   return [...merged.values()];
@@ -78,12 +75,16 @@ async function runSearches(
   const batches = await Promise.all(
     themeDefinition(theme).queries.map((query) => runSearch(query, window, fetcher, pass)),
   );
-  const merged = new Map<string, ResearchResult>();
-  for (const result of batches.flat()) {
+  return [...mergeByUrl(new Map(), batches.flat()).values()];
+}
+
+// The first result for each URL wins, so earlier passes and queries keep their place.
+function mergeByUrl(merged: Map<string, ResearchResult>, results: ResearchResult[]) {
+  for (const result of results) {
     const key = normalizeUrl(result.url);
     if (!merged.has(key)) merged.set(key, result);
   }
-  return [...merged.values()];
+  return merged;
 }
 
 async function runSearch(

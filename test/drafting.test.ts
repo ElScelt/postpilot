@@ -335,10 +335,17 @@ test("the draft prompt is written for the persona and limits it is given", () =>
   const settings = config();
   const request = buildDraftRequest(
     { recent: noRecent, results: [{ ...source, content: "Evidence" }], now, theme: "ai-integration" },
-    { limits: { ...settings.limits, minWords: 100, maxWords: 180 }, persona: { ...settings.persona, stack: ["Go", "Postgres"] } },
+    {
+      limits: { ...settings.limits, minWords: 100, maxWords: 180 },
+      persona: { ...settings.persona, stack: ["Go", "Postgres"] },
+      themes: { "ai-integration": { ...settings.themes["ai-integration"]!, brief: "Only the Go services." } },
+    },
   );
   assert.match(prompt(request), /1\. Write 100-180 words/);
   assert.match(prompt(request), /followed by Go, Postgres\./);
+  assert.match(prompt(request), /Only the Go services\./);
+  const format = JSON.parse(String(request.body)).response_format;
+  assert.deepEqual(format.json_schema.schema.properties.theme.enum, ["ai-integration"]);
 });
 
 test("every Groq request, retries included, can be abandoned when Groq hangs", async () => {

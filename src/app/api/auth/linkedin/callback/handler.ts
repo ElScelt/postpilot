@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { validState } from "@/lib/linkedin/oauth";
+import { connectPath, oauthStateCookie, validState } from "@/lib/linkedin/oauth";
 import { envValue, required } from "@/lib/env";
 import { loadLinkedInToken, saveLinkedInToken } from "@/lib/linkedin/token";
 import { formatDay } from "@/lib/scheduling/time";
@@ -24,8 +24,8 @@ export async function handleLinkedInCallback(request: NextRequest, overrides: Pa
   const deps = { ...productionDeps, ...overrides };
   const code = request.nextUrl.searchParams.get("code");
   const state = request.nextUrl.searchParams.get("state");
-  if (!code || !validState(state) || state !== request.cookies.get("postpilot_oauth_state")?.value) {
-    return new NextResponse("Invalid or expired OAuth state. Start again from /api/auth/linkedin.", { status: 400 });
+  if (!code || !validState(state) || state !== request.cookies.get(oauthStateCookie)?.value) {
+    return new NextResponse(`Invalid or expired OAuth state. Start again from ${connectPath}.`, { status: 400 });
   }
   const body = new URLSearchParams({
     grant_type: "authorization_code", code,
@@ -62,6 +62,6 @@ export async function handleLinkedInCallback(request: NextRequest, overrides: Pa
     `LinkedIn connected as member ${profile.sub}. The authorization expires on ${formatDay(expiresAt)}; `
     + "reconnect before then. You can close this tab.",
   );
-  response.cookies.delete("postpilot_oauth_state");
+  response.cookies.delete(oauthStateCookie);
   return response;
 }

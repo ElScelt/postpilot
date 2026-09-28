@@ -3,6 +3,7 @@ import { config } from "@/lib/config";
 import { nextScheduledRun } from "@/lib/scheduling/schedules";
 import { formatDateTime, formatDay } from "@/lib/scheduling/time";
 import { errorMessage } from "@/lib/errors";
+import { connectPath } from "@/lib/linkedin/oauth";
 import { ActionButton } from "./forms";
 import { runNow } from "./actions";
 import { loadDashboard, tokenSummary } from "./data";
@@ -56,7 +57,7 @@ export default async function Dashboard() {
               {record.connectedAt ? ` on ${formatDay(record.connectedAt)}` : ""}; expires {formatDay(record.expiresAt)}.
             </p>
           )}
-          <p><a href="/api/auth/linkedin">Reconnect LinkedIn</a></p>
+          <p><a href={connectPath}>Reconnect LinkedIn</a></p>
         </div>
         <div style={styles.card}>
           <h2 style={styles.heading}>Schedule</h2>

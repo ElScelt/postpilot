@@ -1,6 +1,6 @@
 import { parseDraftDecision, repairedAnswer, type DraftDecision } from "./decision";
 import { completeGroq, groqRequest, GroqInvalidJsonError } from "./groq";
-import { draftResponseFormat, evidenceForPrompt, hardRules } from "./prompt";
+import { completionTokens, draftResponseFormat, evidenceForPrompt, hardRules } from "./prompt";
 import { draftViolations } from "./rules";
 import type { DraftContext } from "./types";
 import type { ResearchResult } from "../research/tavily";
@@ -55,9 +55,7 @@ export function buildReviewRequest(
   return groqRequest({
     prompt: reviewPrompt(draft, results, now),
     reasoning,
-    // The draft's budget: at 2,500 medium reasoning used it all before the JSON on the
-    // first live run, and every review was skipped.
-    maxTokens: 3000,
+    maxTokens: completionTokens,
     responseFormat: draftResponseFormat(),
   });
 }
