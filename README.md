@@ -1,5 +1,7 @@
 # postpilot
 
+[![CI](https://github.com/ElScelt/postpilot/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ElScelt/postpilot/actions/workflows/ci.yml)
+
 Self-hosted autopilot for your LinkedIn posts. A few evenings a week postpilot researches recent, dated sources on one of your themes, drafts a short post grounded in them, checks it against a strict validator, and sends it to your phone. It publishes the next morning unless you tap **Reject**.
 
 It runs on free tiers: Vercel, Upstash Redis and QStash, Groq, Tavily and ntfy. There are no servers to look after and no third-party posting service between you and LinkedIn.
