@@ -75,20 +75,28 @@ test("a finished run answers with its result and pings the heartbeat", async () 
   assert.deepEqual(calls.heartbeats, [true]);
 });
 
-test("a crash is recorded, fails the heartbeat and answers 500 so QStash retries", async () => {
+test("a crash is recorded and answers 500 so QStash retries, without paging while retries remain", async () => {
   const { deps, calls } = fakes(async () => { throw new Error("Tavily search failed (503)"); });
   const response = await handleRunRequest(signed(0), deps);
   assert.equal(response.status, 500);
-  assert.deepEqual(calls.heartbeats, [false]);
+  assert.deepEqual(calls.heartbeats, [], "a failure QStash retries is not yet a lost night");
   assert.equal(calls.runs[0]!.status, "failed");
   assert.equal(calls.runs[0]!.reason, "Tavily search failed (503)");
   assert.deepEqual(calls.alerts, [], "QStash still has retries");
 });
 
-test("the crash of the last attempt alerts the owner", async () => {
+test("the crash of the last attempt alerts the owner and fails the heartbeat", async () => {
   const { deps, calls } = fakes(async () => { throw new Error("Tavily search failed (503)"); });
   await handleRunRequest(signed(3), deps);
   assert.deepEqual(calls.alerts, ["LinkedIn automation run failed"]);
+  assert.deepEqual(calls.heartbeats, [false]);
+});
+
+test("a run stopped by a dead LinkedIn authorization answers 200 but fails the heartbeat", async () => {
+  const { deps, calls } = fakes(async () => ({ status: "stopped", reason: "LinkedIn is not connected." }));
+  const response = await handleRunRequest(signed(0), deps);
+  assert.equal(response.status, 200, "retrying cannot reconnect LinkedIn");
+  assert.deepEqual(calls.heartbeats, [false]);
 });
 
 test("a rejected draft is not recorded a second time", async () => {

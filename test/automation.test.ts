@@ -127,8 +127,8 @@ test("retires an abandoned post, alerts, and stops on an expired token", async (
     token: { state: "expired", daysRemaining: -3 },
   });
   const result = await runAutomation(now, deps);
-  assert.equal(result.status, "skipped");
-  assert.match(result.reason, /expired 3 days ago/);
+  assert.equal(result.status, "stopped");
+  assert.match(result.status === "stopped" ? result.reason : "", /expired 3 days ago/);
   assert.equal(calls.updates[0]!.status, "failed");
   assert.ok(calls.alerts.includes("A LinkedIn post never went out"));
   assert.ok(calls.alerts.includes("LinkedIn posting is stopped"));

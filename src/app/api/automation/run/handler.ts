@@ -51,10 +51,14 @@ export async function handleRunRequest(request: Request, overrides: Partial<RunR
   try {
     const result = await deps.runAutomation(new Date(), {}, { manual: !signed, finalAttempt });
     if (result.status === "busy") return busyResponse(result.reason, signed, finalAttempt, deps);
-    await deps.pingHeartbeat(true);
+    // A stopped run (no LinkedIn authorization) has nothing to retry but posts nothing
+    // either, so the heartbeat hears a failure for as long as it lasts.
+    await deps.pingHeartbeat(result.status !== "stopped");
     return NextResponse.json(result);
   } catch (error) {
-    await deps.pingHeartbeat(false);
+    // A failure QStash will retry is not yet a lost night, so only the last one pings the
+    // heartbeat as failed; the check's grace period covers a retry that never arrives.
+    if (finalAttempt) await deps.pingHeartbeat(false);
     const message = errorMessage(error);
     console.error("LinkedIn automation failed:", message);
     // A rejected draft was already recorded with its attempts; anything else is recorded
