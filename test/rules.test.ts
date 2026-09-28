@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { draftViolations, spelledNumbers, unsupportedNumbers } from "../src/lib/drafting/rules";
+import { draftViolations } from "../src/lib/drafting/rules";
+import { spelledNumbers, unsupportedNumbers } from "../src/lib/drafting/numbers";
 import { config } from "../src/lib/config";
 
 function validateDraft(...args: Parameters<typeof draftViolations>) {
