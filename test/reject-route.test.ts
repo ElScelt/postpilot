@@ -45,6 +45,33 @@ test("opening the review page never cancels the post", async () => {
   assert.equal(read()[0]!.status, "queued");
 });
 
+test("the review page shows when the post publishes, its theme and topic, and its sources", async () => {
+  const { deps } = fakes([post({
+    automation: {
+      theme: "ai-integration", topic: "Streaming responses",
+      sources: [{ title: "Streaming in Next.js", url: "https://nextjs.org/blog/streaming", publishedDate: "2026-09-01", primary: true }],
+    },
+  })]);
+  const html = await (await handleReviewPage(reviewRequest("p1", "GET"), deps)).text();
+  assert.match(html, /<h1>Publishes Mon 07 Sept?, 06:00<\/h1>/);
+  assert.match(html, /ai-integration · Streaming responses/);
+  assert.match(html, /<a href="https:\/\/nextjs\.org\/blog\/streaming" rel="noreferrer">Streaming in Next\.js<\/a> \(2026-09-01\)/);
+});
+
+test("the review page escapes the draft and its sources, which come from the model and the web", async () => {
+  const { deps } = fakes([post({
+    text: `Use <script>alert("x")</script> & 'quotes'.`,
+    automation: {
+      topic: "<img src=x onerror=alert(1)>",
+      sources: [{ title: "</a><script>", url: `https://example.com/"onmouseover="alert(1)`, publishedDate: "2026-09-01", primary: false }],
+    },
+  })]);
+  const html = await (await handleReviewPage(reviewRequest("p1", "GET"), deps)).text();
+  assert.doesNotMatch(html, /<script>|<img|"onmouseover/);
+  assert.match(html, /Use &#60;script&#62;alert\(&#34;x&#34;\)&#60;\/script&#62; &#38; &#39;quotes&#39;\./);
+  assert.match(html, /&#60;img src=x onerror=alert\(1\)&#62;/);
+});
+
 test("Reject cancels a queued post", async () => {
   const { deps, read } = fakes();
   const response = await handleReject(reviewRequest("p1", "POST"), deps);

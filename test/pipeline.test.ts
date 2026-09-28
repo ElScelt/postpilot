@@ -179,6 +179,15 @@ test("the time budget stops the run from drafting another theme", async () => {
   assert.equal(groqBodies.length, 1);
 });
 
+// A retry would repeat the same searches and hit the same deadline, so a run that has
+// drafted nothing yet keeps looking past the per-theme minimum rather than give up.
+test("a short budget still drafts the first theme with evidence, then stops", async () => {
+  const { fetcher, groqBodies } = fakeFetch((theme) => (theme === firstTheme ? [] : [primary]), [decline(secondTheme)]);
+  const outcome = await generateGroundedDraft(noRecent, { now, fetcher, deadline: Date.now() + 10_000 });
+  assert.deepEqual(outcome.themesTried, [firstTheme, secondTheme]);
+  assert.equal(groqBodies.length, 1);
+});
+
 test("a theme rejected twice gives way to the next theme, and its attempts travel with the outcome", async () => {
   const withDash = decisionJson({ paragraphs: { hook: `${hook} — really`, context: filler.repeat(6), insight: filler.repeat(5), takeaway: "Rule.", question } });
   const { fetcher } = fakeFetch(() => [primary], [withDash, withDash, decisionJson({ theme: secondTheme })]);
