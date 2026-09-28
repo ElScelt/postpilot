@@ -1,8 +1,12 @@
 import { Client } from "@upstash/qstash";
 import { appUrl, required } from "../env";
 
-// The QStash client takes no abort signal. A hung call is bounded by the route's own
-// time limit instead, which the run lock and QStash's retries make recoverable.
+// The QStash client takes no abort signal, so every call is wrapped in withTimeout with
+// this limit. QStash answers in well under a second; a call still hanging after this
+// fails the run, which records why and is retried, instead of running into the route's
+// own limit and ending without a record.
+export const qstashTimeoutMs = 10_000;
+
 export function qstash() {
   return new Client({ token: required("QSTASH_TOKEN") });
 }

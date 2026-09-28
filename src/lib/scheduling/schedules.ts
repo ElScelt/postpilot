@@ -1,5 +1,6 @@
 import { config, weekdays, type Config } from "../config";
-import { automationUrl, qstash } from "./qstash";
+import { automationUrl, qstash, qstashTimeoutMs } from "./qstash";
+import { withTimeout } from "../async";
 import { runRetries } from "../limits";
 import { dayMs, localParts, localTimeToUtc } from "./time";
 
@@ -50,7 +51,7 @@ export async function reconcileAutomationSchedules(options: ReconcileOptions = {
   if (live && options.manual && hostOf(live.destination) !== hostOf(request.destination)) {
     return [`${runScheduleId}: live destination ${live.destination} left alone by a manual run from ${request.destination}`];
   }
-  await client.schedules.create(request);
+  await withTimeout(client.schedules.create(request), qstashTimeoutMs, "QStash");
   return [live
     ? `${runScheduleId}: ${live.cron} at ${live.destination} -> ${request.cron} at ${request.destination}`
     : `${runScheduleId}: created ${request.cron}`];
@@ -82,7 +83,7 @@ function hostOf(url: string) {
 
 async function getIfPresent(client: ReturnType<typeof qstash>, scheduleId: string) {
   try {
-    return await client.schedules.get(scheduleId);
+    return await withTimeout(client.schedules.get(scheduleId), qstashTimeoutMs, "QStash");
   } catch (error) {
     if (hasNotFoundStatus(error)) return undefined;
     throw error;

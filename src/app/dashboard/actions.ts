@@ -4,7 +4,8 @@ import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { authorizeDashboard } from "@/lib/security/dashboard-auth";
 import { cancelPost, editPostText } from "@/lib/storage/posts";
-import { automationUrl, qstash } from "@/lib/scheduling/qstash";
+import { automationUrl, qstash, qstashTimeoutMs } from "@/lib/scheduling/qstash";
+import { withTimeout } from "@/lib/async";
 import { runRetries } from "@/lib/limits";
 import { errorMessage } from "@/lib/errors";
 
@@ -25,14 +26,14 @@ export type ActionResult = { ok: true; message: string } | { ok: false; message:
 export async function runNow(): Promise<ActionResult> {
   await assertAuthorized();
   try {
-    const result = await qstash().publishJSON({
+    const result = await withTimeout(qstash().publishJSON({
       url: automationUrl(),
       body: {},
       // The same budget as the schedule: with none, the run route took the first failure
       // for a retryable one and never sent the alert.
       retries: runRetries,
       label: "postpilot-run-manual",
-    });
+    }), qstashTimeoutMs, "QStash");
     revalidatePath("/dashboard");
     return { ok: true, message: `Run queued (QStash message ${result.messageId}). The draft or the reason arrives on ntfy in a minute or two.` };
   } catch (error) {

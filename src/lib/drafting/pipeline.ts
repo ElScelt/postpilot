@@ -53,10 +53,12 @@ const maxAttempts = 2;
 const defaultMaxThemesDrafted = 3;
 const minimumThemeMs = 75_000;
 
-// Drafting gets the run route's time limit less what the run still does afterwards:
-// storing and scheduling the post, then up to three ten-second ntfy attempts with their
-// waits. Past this deadline the platform would kill the run before it recorded anything.
-const finishReserveMs = 45_000;
+// Drafting gets the run route's time limit less what the run still does afterwards, each
+// step bounded by its own timeout: storing the post (10 s for Redis), scheduling its
+// delivery (10 s for QStash), then the notice (three 10-second ntfy attempts with 4 s of
+// waits between them). That is 54 s at worst; past this deadline the platform would kill
+// the run before it recorded anything.
+const finishReserveMs = 60_000;
 export const draftingBudgetMs = runTimeLimitSeconds * 1000 - finishReserveMs;
 
 // Every Tavily and Groq request also ends at the deadline, whatever its own timeout, so

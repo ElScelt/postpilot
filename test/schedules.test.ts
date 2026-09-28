@@ -167,3 +167,14 @@ test("the day index moves at UTC midnight and nowhere else", () => {
   assert.equal(dayIndex(new Date("2026-09-29T00:00:00Z")), day + 1);
   assert.equal(dayIndex(new Date(0)), 0);
 });
+
+test("reconcile gives up on a QStash that does not answer, so the run records a warning in time", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  let called!: () => void;
+  const reached = new Promise<void>((resolve) => { called = resolve; });
+  const client = { schedules: { get: () => { called(); return new Promise<never>(() => {}); } } } as never;
+  const reconciling = reconcileAutomationSchedules({ client, destination, settings: tallinn });
+  await reached;
+  t.mock.timers.tick(10_000);
+  await assert.rejects(() => reconciling, /QStash did not answer within 10 seconds/);
+});

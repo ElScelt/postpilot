@@ -1,5 +1,6 @@
 import { addPost, postStatuses, transitionPost, type AutomationMetadata, type PostStoreDeps, type QueuedPost } from "./storage/posts";
-import { deliveryTimestamp, publishingUrl, qstash } from "./scheduling/qstash";
+import { deliveryTimestamp, publishingUrl, qstash, qstashTimeoutMs } from "./scheduling/qstash";
+import { withTimeout } from "./async";
 import { publishRetries } from "./limits";
 import { errorMessage } from "./errors";
 
@@ -32,7 +33,7 @@ export async function schedulePost(text: string, scheduledFor: string, automatio
 // delivery at 09:00.
 export async function enqueueDelivery(post: Pick<QueuedPost, "id" | "scheduledFor">, deps: QueueDeps = {}) {
   const publisher = deps.publisher ?? qstash();
-  const result = await publisher.publishJSON({
+  const result = await withTimeout(publisher.publishJSON({
     url: publishingUrl(),
     body: { postId: post.id },
     notBefore: deliveryTimestamp(post.scheduledFor),
@@ -40,6 +41,6 @@ export async function enqueueDelivery(post: Pick<QueuedPost, "id" | "scheduledFo
     label: ["postpilot-publish", post.id],
     redact: { body: true },
     deduplicationId: post.id,
-  });
+  }), qstashTimeoutMs, "QStash");
   return result.messageId;
 }
