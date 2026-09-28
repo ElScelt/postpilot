@@ -357,7 +357,11 @@ test("a review that drops an unrelated source keeps the story when a first-party
   assert.deepEqual(outcome.decision.shouldPost && outcome.decision.sources.map((source) => source.url), [primary.url]);
 });
 
-test("a search that hangs is cut off at the run's deadline", { timeout: 5_000 }, async () => {
+test("a search that hangs is cut off at the run's deadline", { timeout: 5_000 }, async (t) => {
+  // A real hung request holds a socket open; this fake holds nothing, and the deadline's
+  // timer does not keep the process alive, so the test keeps it alive itself.
+  const keepAlive = setInterval(() => {}, 1_000);
+  t.after(() => clearInterval(keepAlive));
   // Answers only when the request is aborted, as a hung connection would.
   const hanging: typeof fetch = (_input, init) => new Promise((_resolve, reject) => {
     init?.signal?.addEventListener("abort", () => reject(init.signal!.reason));
