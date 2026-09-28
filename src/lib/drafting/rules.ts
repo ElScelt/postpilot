@@ -233,7 +233,7 @@ function lastWords(text: string, count: number) {
 // merely because the run started late in the evening.
 function sourceViolations(sources: ResearchSource[], now: Date, windowDays: number, evidence: DraftSettings["evidence"]) {
   if (!sources.length || !meetsEvidenceBar(sources.map((source) => source.url), evidence)) {
-    return ["Draft needs one first-party source or two credible sources from different publishers."];
+    return ["Draft needs one first-party source or two credible sources from different publishers, at least one of them not GitHub, Hugging Face or arXiv."];
   }
   const violations: string[] = [];
   const { oldest: oldestDay, latest: latestDay } = recentDays(now, windowDays);

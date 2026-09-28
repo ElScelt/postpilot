@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { schedulePost } from "../src/lib/queue-post";
+import { scheduleDelivery, schedulePost } from "../src/lib/queue-post";
 import { memoryPostStore } from "./fakes";
 
 process.env.APP_URL = "https://example.vercel.app";
@@ -23,6 +23,14 @@ test("marks the post failed and rethrows when QStash refuses the delivery", asyn
   await assert.rejects(() => schedulePost("text", "2026-09-07T06:00:00.000Z", undefined, { store, publisher: publisher as never }), /QStash 402/);
   assert.equal(read()[0]!.status, "failed");
   assert.equal(read()[0]!.error, "QStash 402");
+});
+
+test("the QStash error is reported even when the post can no longer be marked failed", async () => {
+  const rejected = { id: "a", text: "text", scheduledFor: "2026-09-07T06:00:00.000Z", status: "cancelled" as const, createdAt: "2026-09-06T18:00:00.000Z" };
+  const { store, read } = fakeStore([rejected]);
+  const publisher = { publishJSON: async () => { throw new Error("QStash 402"); } };
+  await assert.rejects(() => scheduleDelivery({ ...rejected, status: "queued" }, { store, publisher: publisher as never }), /QStash 402/);
+  assert.equal(read()[0]!.status, "cancelled", "the owner's Reject stands");
 });
 
 test("a QStash call that hangs marks the post failed instead of running into the route's limit", async (t) => {

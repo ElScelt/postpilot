@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-09-28
+
+### Fixed
+
+- Two pages on open-publishing platforms (GitHub, Hugging Face, arXiv) no longer clear the evidence bar on their own. Anyone can publish there, so a pair of them needs an editorial publisher beside it; a first-party source still clears the bar alone.
+- A run lock that cannot be released no longer turns a queued, announced post into a failed night with a failure alert. The lock expires on its own.
+- When QStash refuses a post's publish message and the post can no longer be marked failed, for example because it was rejected meanwhile, the run reports the QStash error instead of the refusal.
+- Comments that described behaviour from before 1.1.1, or sat above the wrong code, are corrected.
+
 ## [1.2.0] - 2026-09-28
 
 ### Added
@@ -110,7 +119,8 @@ First public release.
   - the review pass drops a cited source that reports a different story, and declines the post when the remaining sources cannot clear the evidence bar;
   - account, sign-in and status portals under a vendor domain (such as `myaccount.microsoft.com`) never count as sources.
 
-[Unreleased]: https://github.com/ElScelt/postpilot/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/ElScelt/postpilot/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/ElScelt/postpilot/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/ElScelt/postpilot/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/ElScelt/postpilot/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/ElScelt/postpilot/compare/v1.0.0...v1.1.0

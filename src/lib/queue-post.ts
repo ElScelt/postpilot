@@ -28,7 +28,11 @@ export async function scheduleDelivery(post: QueuedPost, deps: QueueDeps = {}) {
   } catch (error) {
     post.status = "failed";
     post.error = errorMessage(error);
-    await transitionPost(post.id, ["queued"], { status: "failed", error: post.error }, deps);
+    // The QStash failure is what the run reports. Marking the post failed can itself be
+    // refused, for example when the owner rejected it meanwhile, and must not hide it.
+    await transitionPost(post.id, ["queued"], { status: "failed", error: post.error }, deps).catch((markError: unknown) => {
+      console.error(`Could not mark post ${post.id} failed:`, errorMessage(markError));
+    });
     throw error;
   }
 }

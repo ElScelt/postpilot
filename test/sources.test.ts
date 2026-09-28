@@ -19,6 +19,16 @@ test("configured domains extend the built-in lists", () => {
   assert.ok(!evidenceDomains().includes("go.dev"));
 });
 
+test("two open platforms are not corroboration without an editorial publisher", () => {
+  const model = "https://huggingface.co/some-stranger/model-x";
+  const preprint = "https://arxiv.org/abs/2609.01234";
+  const release = "https://github.com/some-stranger/tool/releases/tag/v1.0.0";
+  assert.equal(meetsEvidenceBar([model, preprint]), false);
+  assert.equal(meetsEvidenceBar([release, preprint]), false);
+  assert.equal(meetsEvidenceBar([model, "https://www.infoq.com/news/2026/09/model-x/"]), true);
+  assert.equal(meetsEvidenceBar([model, "https://openai.com/index/model-x"]), true);
+});
+
 test("classifies established press as credible", () => {
   assert.equal(sourceTier("https://www.infoq.com/articles/self-building-agent-langchain4j/"), "credible");
   assert.equal(sourceTier("https://www.securityweek.com/nuclear-sabotage-malware-benchmark/"), "credible");

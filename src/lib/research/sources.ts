@@ -7,8 +7,8 @@ export type EvidenceSettings = Config["evidence"];
 // First-party announcements and research: the vendor or lab making the claim. Hosts
 // where anyone can publish (github.com repositories, huggingface.co model cards,
 // arxiv.org preprints) are deliberately absent: a stranger's README must never stand in
-// for a vendor announcement on its own, so they count as credible and need a second
-// publisher.
+// for a vendor announcement on its own, so they count as credible, and only alongside an
+// editorial publisher (see openPlatforms).
 const primaryDomains = [
   "openai.com", "anthropic.com", "ai.google.dev", "developers.googleblog.com",
   "github.blog", "microsoft.com", "research.google", "meta.com",
@@ -38,6 +38,10 @@ const credibleDomains = [
   "computerworld.com", "theinformation.com",
   "github.com", "huggingface.co", "arxiv.org",
 ];
+
+// Credible hosts where anyone can publish. Two strangers on two such platforms are not
+// corroboration, so the evidence bar needs an editorial publisher beside them.
+const openPlatforms = new Set(["github.com", "huggingface.co", "arxiv.org"]);
 
 function primary(evidence: EvidenceSettings) {
   return [...primaryDomains, ...evidence.primaryDomains];
@@ -118,9 +122,10 @@ export function normalizeUrl(url: string) {
   return parsed.toString().replace(/\/$/, "");
 }
 
-// One first-party source, or two credible ones from different publishers. Counting
-// distinct publishers rather than distinct URLs stops a single outlet — or a single
-// article cited twice — from standing in for corroboration.
+// One first-party source, or two credible ones from different publishers, at least one
+// of them editorial rather than an open platform. Counting distinct publishers rather
+// than distinct URLs stops a single outlet — or a single article cited twice — from
+// standing in for corroboration.
 export function meetsEvidenceBar(urls: string[], evidence: EvidenceSettings = config().evidence) {
   const seen = new Set<string>();
   const publishers = new Set<string>();
@@ -135,7 +140,7 @@ export function meetsEvidenceBar(urls: string[], evidence: EvidenceSettings = co
     const publisher = matchedDomain(new URL(url).hostname.toLowerCase(), credible(evidence));
     if (publisher) publishers.add(publisher);
   }
-  return publishers.size >= 2;
+  return publishers.size >= 2 && [...publishers].some((publisher) => !openPlatforms.has(publisher));
 }
 
 // The evidence the model writes from. A theme's search returns a grab bag, and the model

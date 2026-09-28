@@ -44,7 +44,7 @@ export type DraftOptions = {
   // Wall-clock limit for the whole night, as an epoch millisecond. The Groq free tier
   // admits about one request of this size a minute, so every extra theme costs up to a
   // minute, and the run must never reach the function's own timeout. The run passes
-  // its own (draftingBudgetMs in automation.ts); a local draft gets the route's limit.
+  // its own (draftingBudgetMs in automation/draft.ts); a local draft gets the route's limit.
   deadline?: number;
   // How many themes may be drafted, not merely searched, in one run.
   maxThemesDrafted?: number;

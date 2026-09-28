@@ -45,9 +45,9 @@ const requestTimeoutMs = 10_000;
 // The longest a notice can take: every attempt timing out, plus the waits between them.
 export const ntfyWorstCaseMs = (retryDelaysMs.length + 1) * requestTimeoutMs + retryDelaysMs.reduce((sum, delay) => sum + delay, 0);
 
-// A notification failure must never cost the post that was already scheduled, so this
-// never throws. It does retry on the transient statuses, because losing the overnight
-// notice means a draft publishes unreviewed at 09:00.
+// Never throws: it answers whether the message arrived, and the caller decides what a
+// failure costs. For a review notice that is the run, which withdraws the post rather
+// than publish it unreviewed. It retries on the transient statuses first.
 export async function sendNtfy(
   message: NtfyMessage,
   fetcher: typeof fetch = fetch,

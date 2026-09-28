@@ -16,12 +16,12 @@ export function redisCredentials(env: Environment = process.env) {
   return url && token ? { url, token } : undefined;
 }
 
-// `automaticDeserialization: false` returns values as the exact strings Redis holds,
-// which a compare-and-set needs.
 // A Redis call takes milliseconds. Without a timeout a hung one would hold the run
 // until the platform kills it; with one, the run fails, records why and is retried.
 export const redisTimeoutMs = 10_000;
 
+// `automaticDeserialization: false` returns values as the exact strings Redis holds,
+// which a compare-and-set needs.
 export function redis(options: { automaticDeserialization?: boolean } = {}) {
   const { url, token } = redisCredentials() ?? {};
   if (!url || !token) {

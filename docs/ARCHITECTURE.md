@@ -62,7 +62,7 @@ A draft that fails validation twice answers 500, so QStash retries with a fresh 
   - **reference:** undated documentation;
   - **unrated:** everything else, including forums, gists and account, sign-in or status portals under a vendor domain.
 
-  `meetsEvidenceBar` requires one dated primary source or two dated credible ones. `focusEvidence` passes the model only the sources it may draw on. The domain lists cover web development and AI vendors; `evidence` in the config adds to them. Only http(s) results are kept, since every source becomes a link on the review page and the dashboard.
+  `meetsEvidenceBar` requires one dated primary source or two dated credible ones, at least one of which is editorial rather than an open platform (GitHub, Hugging Face, arXiv). `focusEvidence` passes the model only the sources it may draw on. The domain lists cover web development and AI vendors; `evidence` in the config adds to them. Only http(s) results are kept, since every source becomes a link on the review page and the dashboard.
 
 ### 3. Drafting (`src/lib/drafting/`)
 
@@ -119,7 +119,7 @@ src/
     drafting/                prompt, Groq client, decision parsing, validator, claims and text helpers, review, pipeline
     linkedin/                publish.ts (API client), token.ts (token storage), oauth.ts (OAuth state)
     scheduling/              QStash client, schedule and publish-time maths, time zones
-    storage/                 Redis client, posts, run history
+    storage/                 Redis client, posts, run history, run lock
     notify/                  ntfy and healthchecks.io
     security/                QStash/bearer auth, dashboard auth, reject tokens, constant-time compare
 test/                        node:test suites, one per module, all services faked

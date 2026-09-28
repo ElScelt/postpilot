@@ -45,6 +45,8 @@ type Options = {
   noticeFails?: boolean;
   // NTFY_TOPIC is unset.
   noTopic?: boolean;
+  // Redis fails as the lock is released.
+  releaseFails?: boolean;
 };
 
 function fakes(options: Options = {}) {
@@ -78,7 +80,10 @@ function fakes(options: Options = {}) {
     notifyOperator: async (alert) => { calls.alerts.push(alert.title); return true; },
     recordAutomationRun: async (run) => { calls.runs.push(run); return run; },
     acquireRunLock: async () => (options.locked ? undefined : "token"),
-    releaseRunLock: async () => { calls.released = true; },
+    releaseRunLock: async () => {
+      calls.released = true;
+      if (options.releaseFails) throw new Error("Redis unreachable");
+    },
     ntfyTopic: options.noTopic ? undefined : "secret-topic",
   };
   return { deps, calls };
@@ -96,6 +101,14 @@ test("drafts, schedules and notifies on a normal night", async () => {
   assert.equal(calls.runs[0]!.scheduledFor, "2026-09-07T09:00:00.000Z");
   assert.deepEqual(calls.alerts, []);
   assert.equal(calls.released, true);
+});
+
+test("a lock that cannot be released does not turn a queued post into a failed night", async () => {
+  const { deps, calls } = fakes({ releaseFails: true });
+  const result = await runAutomation(now, deps);
+  assert.equal(result.status, "scheduled");
+  assert.equal(calls.released, true);
+  assert.equal(calls.runs[0]!.status, "scheduled");
 });
 
 test("skips drafting when a post for tomorrow's slot already exists", async () => {

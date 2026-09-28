@@ -207,7 +207,7 @@ To catch a run that never fires at all (a deleted schedule, rotated keys, a brok
 The validator enforces these rules instead of trusting the prompt to follow them. The prompt quotes the same word lists, so the two cannot drift apart.
 
 - `minWords`–`maxWords` words, a hook of at most `maxHookLength` characters, and a specific closing question.
-- One dated first-party source, or two dated credible publishers, all reporting the same development and no older than `sourceWindowDays`. Documentation and reference pages carry no date, so they can only accompany a dated source.
+- One dated first-party source, or two dated credible publishers, all reporting the same development and no older than `sourceWindowDays`. GitHub, Hugging Face and arXiv count as credible, but anyone can publish there, so a pair of them needs an editorial publisher beside it. Documentation and reference pages carry no date, so they can only accompany a dated source.
 - No number of ten or more that the evidence does not state, and no such number spelled out in words.
 - No em-dashes, no freshness words ("just", "latest"), no invented personal history ("we migrated", "our codebase"), and no claim about your own systems stated as fact ("our component library renders").
 - Complete sentences: every prose paragraph ends with a full stop, no two sentences run together, and no run-together compounds ("adhoc", "a trade off"). Checklist lines are exempt.

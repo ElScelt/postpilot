@@ -101,8 +101,6 @@ export class GroqRateLimitError extends Error {
   }
 }
 
-// A wait for the rate limit that would end after `deadline` is not started: the platform
-// would kill the run mid-sleep, and the run would end without recording why.
 // How one call is made: the fetch it goes through, how it waits out a rate limit, and
 // the run's deadline, past which no wait starts.
 export type GroqCall = {
@@ -111,6 +109,8 @@ export type GroqCall = {
   deadline?: number;
 };
 
+// A wait for the rate limit that would end after `deadline` is not started: the platform
+// would kill the run mid-sleep, and the run would end without recording why.
 export async function requestGroq(init: RequestInit, { fetcher = fetch, wait = sleep, deadline = Infinity }: GroqCall = {}) {
   const send = () => fetcher(groqEndpoint, { ...init, signal: AbortSignal.timeout(requestTimeoutMs) });
   let response = await send();

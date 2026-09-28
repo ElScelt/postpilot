@@ -78,7 +78,11 @@ export async function runAutomation(
     }
     return await draftAndQueue(run, posts);
   } finally {
-    await deps.releaseRunLock(lockKey, lockToken);
+    // The lock expires on its own, so a failed release must not replace the run's real
+    // outcome: a queued, announced post would otherwise be reported as a failed night.
+    await deps.releaseRunLock(lockKey, lockToken).catch((error: unknown) => {
+      console.error("Could not release the run lock; it expires on its own:", errorMessage(error));
+    });
   }
 }
 
