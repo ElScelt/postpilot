@@ -1,4 +1,5 @@
 import { supportedGroqModels } from "./drafting/groq";
+import { redisCredentials } from "./storage/redis";
 
 // The dashboard's setup card. A first deploy is diagnosed from the page itself, by
 // name, rather than from a 500 and the Vercel logs. Secrets never leave the server:
@@ -31,8 +32,8 @@ export function checkSetup(env: SetupEnvironment, context: SetupContext = {}): S
 
   const missing = requiredVariables.filter((name) => !env[name]?.trim());
   if (missing.length) error(`Missing required variables: ${missing.join(", ")}.`);
-  if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) {
-    error("Redis is not configured. Connect the Upstash Redis integration, which adds UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN.");
+  if (!redisCredentials(env)) {
+    error("Redis is not configured. Connect the Upstash Redis integration (it adds KV_REST_API_URL and KV_REST_API_TOKEN), or set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN.");
   }
 
   const appUrl = env.APP_URL?.trim();

@@ -69,7 +69,7 @@ For local development you need Node.js 22.9 or newer; `.nvmrc` pins 22.
 2. **Edit `postpilot.config.ts`.** At minimum set `timeZone`, `persona.role` and your `themes` (see [Configuration](#configuration)). Run `npm ci && npm test` to check that it is valid.
 3. **Create the LinkedIn app.** In the [developer portal](https://www.linkedin.com/developers/apps), create an app and, on its Products tab, add both **Share on LinkedIn** and **Sign In with LinkedIn using OpenID Connect**. If either is missing, the consent screen fails with a scope error.
 4. **Import the repository into Vercel.** Under Project Settings → Functions, check that **Fluid compute** is enabled (it is the default for new projects). Importing from the dashboard detects Next.js; a project created with `vercel project add` has no framework preset, so set it to Next.js under Project Settings → Build and Deployment or the first deploy fails looking for a `public` directory.
-5. **Add Upstash.** From the [Vercel marketplace](https://vercel.com/marketplace/upstash), install the Upstash integration for the project with one Redis database and one QStash instance. This adds `UPSTASH_REDIS_REST_*` and `QSTASH_*`. If the marketplace offers no free Redis database for your account, create one at [console.upstash.com](https://console.upstash.com/) and set `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` yourself.
+5. **Add Upstash.** From the [Vercel marketplace](https://vercel.com/marketplace/upstash), install the Upstash integration for the project with one Redis database and one QStash instance. This adds `KV_REST_API_URL` and `KV_REST_API_TOKEN` for Redis, and `QSTASH_*`. If the marketplace offers no free Redis database for your account, create one at [console.upstash.com](https://console.upstash.com/) and set `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` yourself.
 6. **Set the remaining environment variables** in Vercel (Project → Settings → Environment Variables, Production). `.env.example` lists them all; the [environment variables](#environment-variables) table says where each value comes from.
    - `APP_URL`: `https://YOUR-DOMAIN`, with no path and no trailing slash.
    - `LINKEDIN_REDIRECT_URI`: `https://YOUR-DOMAIN/api/auth/linkedin/callback`.
@@ -164,7 +164,7 @@ Environment variables hold secrets and infrastructure only.
 | `AUTOMATION_SECRET` | yes | Long random string. It is the dashboard password, the bearer token for manual runs, and the key that signs Reject links. |
 | `GROQ_API_KEY`, `TAVILY_API_KEY` | yes | Groq and Tavily consoles. |
 | `QSTASH_TOKEN`, `QSTASH_CURRENT_SIGNING_KEY`, `QSTASH_NEXT_SIGNING_KEY` | yes | Added by the Upstash integration. |
-| `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | yes | Added by the Upstash integration. |
+| `KV_REST_API_URL`, `KV_REST_API_TOKEN` | yes | Added by the Upstash integration. A database created directly in the Upstash console gives you `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` instead; either pair works. |
 | `NTFY_TOPIC` | in practice | Long random topic name. Without it, drafts publish unreviewed and nothing alerts you. |
 | `LINKEDIN_MEMBER_ID` | recommended | Pins the deployment to your LinkedIn member. Unset, the first member to connect binds it. |
 | `HEALTHCHECK_URL` | no | healthchecks.io ping URL. Without it, a run that never fires is silent. |
