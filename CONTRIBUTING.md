@@ -34,7 +34,9 @@ docker run -d --name postpilot-redis --network postpilot-test redis:7.4-alpine
 docker run -d --network postpilot-test -p 8079:80 -e SRH_MODE=env -e SRH_TOKEN=postpilot-test -e SRH_CONNECTION_STRING=redis://postpilot-redis:6379 hiett/serverless-redis-http:0.0.10
 ```
 
-`npm run build` is the only check that validates what route files export, so run it before pushing a change under `src/app`. `npm run test:coverage` prints a coverage report.
+`npm run build` is the only check that validates what route files export, so run it before pushing a change under `src/app`.
+
+`npm run test:coverage` runs the same tests and prints a coverage report. CI runs it and fails when lines, branches or functions drop below the floor set in `package.json`, which sits a little under what the suite measures today. Node counts only the files a test loads, so the floor says nothing about `src/app/dashboard/page.tsx` and `actions.ts`: they need the Next runtime, and `npm run build` plus the tests of the helpers they call are what check them. If a change lowers coverage, add tests rather than the floor.
 
 ## Pull requests
 

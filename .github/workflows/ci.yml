@@ -21,7 +21,8 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
-      - run: npm test
+      # The same tests as npm test, failing if coverage drops below the floor in package.json.
+      - run: npm run test:coverage
       - name: Offline draft
         run: npm run draft -- --offline
       - run: npm run build

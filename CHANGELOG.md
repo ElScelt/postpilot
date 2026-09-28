@@ -6,6 +6,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Changed
 
+- CI fails when test coverage drops below a floor, and the dashboard proxy, the LinkedIn connect and callback routes and every route file's exports have tests.
 - CI also runs `npm run build`, and its actions are pinned to commit SHAs.
 
 ### Fixed
