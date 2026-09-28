@@ -6,6 +6,8 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
+    commit-message:
+      prefix: "chore(deps)"
     groups:
       next:
         patterns: ["next", "eslint-config-next", "react", "react-dom"]
@@ -27,3 +29,5 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
+    commit-message:
+      prefix: "ci(deps)"
