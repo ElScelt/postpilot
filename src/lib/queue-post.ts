@@ -13,7 +13,12 @@ export type QueueDeps = PostStoreDeps & {
 // Stores the post, then asks QStash to deliver it at its publish time. A post QStash
 // refused is marked failed, so it can never sit in the queue looking like pending work.
 export async function schedulePost(text: string, scheduledFor: string, automation?: AutomationMetadata, deps: QueueDeps = {}) {
-  const post = await addPost(text, scheduledFor, automation, deps);
+  return scheduleDelivery(await addPost(text, scheduledFor, automation, deps), deps);
+}
+
+// Schedules the delivery of a post already in the store: a new one, or one that an
+// earlier attempt stored and was killed before it could schedule.
+export async function scheduleDelivery(post: QueuedPost, deps: QueueDeps = {}) {
   try {
     const messageId = await enqueueDelivery(post, deps);
     post.qstashMessageId = messageId;

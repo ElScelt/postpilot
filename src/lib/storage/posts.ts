@@ -18,6 +18,9 @@ export type QueuedPost = {
   // answer is recorded, so a Reject or an edit can never land in between.
   status: "queued" | "publishing" | "posted" | "cancelled" | "failed";
   createdAt: string;
+  // When the review notice reached ntfy. A queued post without it has not been seen
+  // by the owner yet, so a retry of the run sends the notice again.
+  notifiedAt?: string;
   // When a delivery claimed the post for publishing.
   claimedAt?: string;
   postedAt?: string;
@@ -44,6 +47,7 @@ export const postSchema = z.looseObject({
   scheduledFor: z.string(),
   status: z.enum(postStatuses),
   createdAt: z.string(),
+  notifiedAt: z.string().optional(),
   claimedAt: z.string().optional(),
   postedAt: z.string().optional(),
   originalText: z.string().optional(),

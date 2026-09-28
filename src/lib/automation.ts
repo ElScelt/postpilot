@@ -1,7 +1,7 @@
 import { DraftRejectedError, draftingBudgetMs, generateGroundedDraft } from "./drafting/pipeline";
 import { scheduledPostTime } from "./scheduling/schedules";
 import { abandonedPosts, isLive, listPosts, PostStateError, transitionPost, type QueuedPost } from "./storage/posts";
-import { schedulePost } from "./queue-post";
+import { scheduleDelivery, schedulePost } from "./queue-post";
 import { recordAutomationRun, type AutomationRun } from "./storage/runs";
 import { reconcileAutomationSchedules } from "./scheduling/schedules";
 import { linkedInTokenStatus, reconnectWarningDays } from "./linkedin/token";
@@ -20,6 +20,7 @@ export type AutomationDeps = {
   listPosts: typeof listPosts;
   transitionPost: typeof transitionPost;
   schedulePost: typeof schedulePost;
+  scheduleDelivery: typeof scheduleDelivery;
   linkedInTokenStatus: typeof linkedInTokenStatus;
   generateGroundedDraft: typeof generateGroundedDraft;
   reconcileAutomationSchedules: typeof reconcileAutomationSchedules;
@@ -33,7 +34,7 @@ export type AutomationDeps = {
 
 function productionDeps(): AutomationDeps {
   return {
-    listPosts, transitionPost, schedulePost, linkedInTokenStatus, generateGroundedDraft,
+    listPosts, transitionPost, schedulePost, scheduleDelivery, linkedInTokenStatus, generateGroundedDraft,
     reconcileAutomationSchedules, notifyDraftQueued, notifyOperator, recordAutomationRun,
     acquireRunLock: (key, ttlSeconds) => acquireRunLock(key, ttlSeconds),
     releaseRunLock: (key, token) => releaseRunLock(key, token),
@@ -101,6 +102,7 @@ export async function runAutomation(
     if (stopped) return stopped;
 
     const duplicate = findDuplicate(posts, scheduledFor);
+    if (duplicate && unfinished(duplicate)) return await finishQueuedPost(run, duplicate);
     if (duplicate) {
       const reason = `Automation already created post ${duplicate.id}.`;
       await run.record({ status: "skipped", reason });
@@ -205,6 +207,60 @@ function findDuplicate(posts: QueuedPost[], scheduledFor: Date) {
   );
 }
 
+// A queued post an earlier attempt stored but was killed or failed before it scheduled
+// its delivery or announced it. Drafting again would throw the story away and cost the
+// owner nothing but a fresh sample; finishing it keeps the one already researched.
+function unfinished(post: QueuedPost) {
+  return post.status === "queued" && (!post.qstashMessageId || (envValue("NTFY_TOPIC") !== undefined && !post.notifiedAt));
+}
+
+async function finishQueuedPost(run: Run, stored: QueuedPost) {
+  const { deps, warnings } = run;
+  warnings.push(`Finished post ${stored.id}, which an earlier attempt stored but did not ${stored.qstashMessageId ? "announce" : "schedule"}.`);
+  const post = stored.qstashMessageId ? stored : await deps.scheduleDelivery(stored);
+  await announce(run, post);
+  await run.record({
+    status: "scheduled", postId: post.id, topic: post.automation?.topic, theme: post.automation?.theme, scheduledFor: post.scheduledFor,
+  });
+  return {
+    status: "scheduled" as const,
+    id: post.id,
+    scheduledFor: post.scheduledFor,
+    topic: post.automation?.topic,
+    theme: post.automation?.theme,
+    sources: post.automation?.sources ?? [],
+    warnings,
+  };
+}
+
+// The notice is the owner's only chance to review the draft, so a post never publishes
+// without it. A failed notice fails the run; QStash's retry finds the post stored but
+// not announced and sends the notice again. With no retry left, the post is withdrawn
+// instead: a night without a post is better than a post nobody reviewed.
+async function announce({ options, deps, warnings }: Run, post: QueuedPost) {
+  const topic = envValue("NTFY_TOPIC");
+  if (!topic) {
+    warnings.push("NTFY_TOPIC is unset, so the draft publishes without review.");
+    return;
+  }
+  if (await deps.notifyDraftQueued({ postId: post.id, text: post.text, scheduledFor: post.scheduledFor, topic, appUrl: appUrl() })) {
+    try {
+      await deps.transitionPost(post.id, ["queued"], { notifiedAt: new Date().toISOString() });
+    } catch (error) {
+      // The owner has the notice; at worst a retry sends it a second time.
+      warnings.push(`The notice went out but could not be recorded: ${errorMessage(error)}`);
+    }
+    return;
+  }
+  if (!(options.finalAttempt ?? true)) {
+    throw new Error(`The review notice for the post scheduled for ${formatDateTime(post.scheduledFor)} could not be delivered; QStash retries the run, which sends it again.`);
+  }
+  await deps.transitionPost(post.id, ["queued"], {
+    status: "failed", error: "Withdrawn because the review notice could not be delivered; a post nobody could review is never published.",
+  });
+  throw new Error(`The review notice could not be delivered on any attempt, so the post scheduled for ${formatDateTime(post.scheduledFor)} was withdrawn and will not publish.`);
+}
+
 async function draftAndQueue(run: Run, posts: QueuedPost[]) {
   const { now, scheduledFor, options, deps, warnings } = run;
   let outcome;
@@ -241,14 +297,7 @@ async function draftAndQueue(run: Run, posts: QueuedPost[]) {
     theme: decision.theme,
     sources: decision.sources,
   });
-  const topic = envValue("NTFY_TOPIC");
-  if (!topic) {
-    warnings.push("NTFY_TOPIC is unset, so the draft publishes without review.");
-  } else if (!(await deps.notifyDraftQueued({
-    postId: post.id, text: decision.text, scheduledFor: post.scheduledFor, topic, appUrl: appUrl(),
-  }))) {
-    warnings.push("Draft notification could not be delivered.");
-  }
+  await announce(run, post);
   await run.record({
     status: "scheduled", postId: post.id, topic: decision.topic,
     theme, themesTried, evidenceHosts, attempts, scheduledFor: post.scheduledFor,

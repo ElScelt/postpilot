@@ -149,6 +149,7 @@ test("the retry after the first run queued its post ends cleanly", async () => {
   state.posts = [{
     id: "queued", text: "t", scheduledFor: scheduledPostTime(new Date()).toISOString(), status: "queued",
     createdAt: new Date().toISOString(), automation: { topic: "t", theme: "frontend", sources: [] },
+    qstashMessageId: "msg", notifiedAt: new Date().toISOString(),
   }];
   const response = await handleRunRequest(signed(2), deps);
   assert.equal(response.status, 200);

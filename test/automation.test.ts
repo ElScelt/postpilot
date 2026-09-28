@@ -42,12 +42,14 @@ type Options = {
   draftError?: Error;
   reconcile?: AutomationDeps["reconcileAutomationSchedules"];
   locked?: boolean;
+  // The notice cannot reach ntfy.
+  noticeFails?: boolean;
 };
 
 function fakes(options: Options = {}) {
   const calls = {
     scheduled: [] as string[], runs: [] as AutomationRun[], alerts: [] as string[],
-    updates: [] as QueuedPost[], notified: 0, drafted: [] as RecentActivity[], released: false,
+    updates: [] as QueuedPost[], notified: 0, drafted: [] as RecentActivity[], released: false, delivered: [] as string[],
   };
   const deps: AutomationDeps = {
     listPosts: async () => options.posts ?? [],
@@ -58,7 +60,11 @@ function fakes(options: Options = {}) {
     },
     schedulePost: async (text, scheduledFor, automation) => {
       calls.scheduled.push(text);
-      return { id: "new", text, scheduledFor, status: "queued", createdAt: now.toISOString(), automation };
+      return { id: "new", text, scheduledFor, status: "queued", createdAt: now.toISOString(), automation, qstashMessageId: "msg_new" };
+    },
+    scheduleDelivery: async (stored) => {
+      calls.delivered.push(stored.id);
+      return { ...stored, qstashMessageId: "msg_resumed" };
     },
     linkedInTokenStatus: async (at = Date.now()) => (at > now.getTime() + 60_000 ? options.tokenAtPublish ?? options.token ?? valid : options.token ?? valid),
     generateGroundedDraft: async (recent) => {
@@ -67,7 +73,7 @@ function fakes(options: Options = {}) {
       return options.outcome ?? scheduledOutcome;
     },
     reconcileAutomationSchedules: options.reconcile ?? (async () => []),
-    notifyDraftQueued: async () => { calls.notified += 1; return true; },
+    notifyDraftQueued: async () => { calls.notified += 1; return !options.noticeFails; },
     notifyOperator: async (alert) => { calls.alerts.push(alert.title); return true; },
     recordAutomationRun: async (run) => { calls.runs.push(run); return run; },
     acquireRunLock: async () => (options.locked ? undefined : "token"),
@@ -91,10 +97,12 @@ test("drafts, schedules and notifies on a normal night", async () => {
 });
 
 test("skips drafting when a post for tomorrow's slot already exists", async () => {
-  const { deps, calls } = fakes({ posts: [post({ id: "queued", status: "queued", scheduledFor: "2026-09-07T06:00:00.000Z" })] });
+  const { deps, calls } = fakes({ posts: [post({
+    id: "queued", status: "queued", scheduledFor: "2026-09-07T06:00:00.000Z", qstashMessageId: "msg", notifiedAt: "2026-09-06T18:01:00.000Z",
+  })] });
   const result = await runAutomation(now, deps);
   assert.equal(result.status, "skipped");
-  assert.match(result.reason, /already created post queued/);
+  assert.match(result.status === "skipped" ? result.reason : "", /already created post queued/);
   assert.equal(calls.drafted.length, 0);
   assert.equal(calls.scheduled.length, 0);
 });
@@ -135,7 +143,10 @@ test("a post stuck mid-publish is retired with a check-LinkedIn alert and never 
   });
   const froms: string[][] = [];
   const record = deps.transitionPost;
-  deps.transitionPost = async (id, from, patch) => { froms.push(from); return record(id, from, patch); };
+  deps.transitionPost = async (id, from, patch) => {
+    if (id === "stuck") froms.push(from);
+    return record(id, from, patch);
+  };
   await runAutomation(now, deps);
   assert.deepEqual(froms, [["publishing"]]);
   assert.equal(calls.updates[0]!.status, "failed");
@@ -230,6 +241,51 @@ test("a skipped night is recorded with the themes tried and pushed at low priori
   assert.equal(calls.scheduled.length, 0);
 });
 
+test("records when the notice reached ntfy", async () => {
+  const { deps, calls } = fakes();
+  await runAutomation(now, deps);
+  assert.ok(calls.updates.some((update) => update.id === "new" && update.notifiedAt));
+});
+
+test("a notice that cannot be delivered fails the run while QStash has retries, and the post stays queued", async () => {
+  const { deps, calls } = fakes({ noticeFails: true });
+  await assert.rejects(() => runAutomation(now, deps, { finalAttempt: false }), /could not be delivered; QStash retries the run/);
+  assert.equal(calls.scheduled.length, 1);
+  assert.ok(!calls.updates.some((update) => update.status === "failed"), "the post waits for the retry to announce it");
+  assert.equal(calls.released, true);
+});
+
+test("on the last attempt an undeliverable notice withdraws the post, so it never publishes unreviewed", async () => {
+  const { deps, calls } = fakes({ noticeFails: true });
+  await assert.rejects(() => runAutomation(now, deps, { finalAttempt: true }), /was withdrawn and will not publish/);
+  const withdrawn = calls.updates.find((update) => update.id === "new" && update.status === "failed");
+  assert.match(withdrawn?.error ?? "", /review notice could not be delivered/);
+});
+
+test("a retry that finds tonight's post stored but never announced sends the notice instead of drafting again", async () => {
+  const stored = post({ id: "stored", status: "queued", scheduledFor: "2026-09-07T09:00:00.000Z", qstashMessageId: "msg" });
+  const { deps, calls } = fakes({ posts: [stored] });
+  const result = await runAutomation(now, deps);
+  assert.equal(result.status, "scheduled");
+  assert.equal(result.status === "scheduled" ? result.id : "", "stored");
+  assert.equal(calls.drafted.length, 0);
+  assert.deepEqual(calls.delivered, [], "its delivery was already scheduled");
+  assert.equal(calls.notified, 1);
+  assert.equal(calls.runs[0]!.status, "scheduled");
+  assert.match(calls.runs[0]!.warning!, /stored but did not announce/);
+});
+
+test("a retry that finds tonight's post stored but never scheduled schedules and announces it", async () => {
+  const stored = post({ id: "stored", status: "queued", scheduledFor: "2026-09-07T09:00:00.000Z" });
+  const { deps, calls } = fakes({ posts: [stored] });
+  const result = await runAutomation(now, deps);
+  assert.equal(result.status, "scheduled");
+  assert.deepEqual(calls.delivered, ["stored"]);
+  assert.equal(calls.notified, 1);
+  assert.equal(calls.drafted.length, 0);
+  assert.match(calls.runs[0]!.warning!, /stored but did not schedule/);
+});
+
 test("a missing notification topic is a warning, never a lost post", async (t) => {
   delete process.env.NTFY_TOPIC;
   t.after(() => { process.env.NTFY_TOPIC = "secret-topic"; });
@@ -238,6 +294,14 @@ test("a missing notification topic is a warning, never a lost post", async (t) =
   assert.equal(result.status, "scheduled");
   assert.equal(calls.notified, 0);
   assert.match(calls.runs[0]!.warning!, /NTFY_TOPIC is unset/);
+});
+
+test("without a notification topic a scheduled post counts as finished", async (t) => {
+  delete process.env.NTFY_TOPIC;
+  t.after(() => { process.env.NTFY_TOPIC = "secret-topic"; });
+  const { deps, calls } = fakes({ posts: [post({ id: "queued", status: "queued", scheduledFor: "2026-09-07T09:00:00.000Z", qstashMessageId: "msg" })] });
+  assert.equal((await runAutomation(now, deps)).status, "skipped");
+  assert.equal(calls.notified, 0);
 });
 
 test("rejected drafts still count for the rotation and are named as rejected stories", () => {
