@@ -1,9 +1,7 @@
 import { z } from "zod";
 import { versionedStore, type VersionedStore } from "./redis";
-import { deliveryTimestamp, qstash, publishingUrl } from "../scheduling/qstash";
-import { maxPostLength, publishRetries, publishTimeLimitSeconds } from "../limits";
+import { maxPostLength, publishTimeLimitSeconds } from "../limits";
 import type { ResearchSource } from "../drafting/types";
-import { errorMessage } from "../errors";
 
 export type AutomationMetadata = {
   topic: string;
@@ -65,10 +63,9 @@ export function isLive(post: QueuedPost) {
 // limit has passed; a minute on top covers the clocks of two different functions.
 export const staleClaimMs = publishTimeLimitSeconds * 1000 + 60_000;
 
-// The two collaborators the store needs, injectable so tests run without Upstash.
+// The store, injectable so tests run without Upstash.
 export type PostStoreDeps = {
   store?: VersionedStore;
-  publisher?: Pick<ReturnType<typeof qstash>, "publishJSON">;
 };
 
 const queueKey = "postpilot:posts";
@@ -145,33 +142,6 @@ export async function addPost(text: string, scheduledFor: string, automation?: A
     posts.push({ ...post });
     return post;
   }, deps);
-}
-
-export async function schedulePost(text: string, scheduledFor: string, automation?: AutomationMetadata, deps: PostStoreDeps = {}) {
-  const post = await addPost(text, scheduledFor, automation, deps);
-  try {
-    const publisher = deps.publisher ?? qstash();
-    const result = await publisher.publishJSON({
-      url: publishingUrl(),
-      body: { postId: post.id },
-      notBefore: deliveryTimestamp(scheduledFor),
-      retries: publishRetries,
-      label: ["postpilot-publish", post.id],
-      redact: { body: true },
-      // The SDK re-sends a publish whose response was lost; without this id that is a
-      // second delivery for the same post at 09:00.
-      deduplicationId: post.id,
-    });
-    post.qstashMessageId = result.messageId;
-    // The owner may have rejected it already; the message id is worth keeping either way.
-    await transitionPost(post.id, postStatuses, { qstashMessageId: result.messageId }, deps);
-    return post;
-  } catch (error) {
-    post.status = "failed";
-    post.error = errorMessage(error);
-    await transitionPost(post.id, ["queued"], { status: "failed", error: post.error }, deps);
-    throw error;
-  }
 }
 
 // A change refused because the post has moved on from the states it applies to, usually

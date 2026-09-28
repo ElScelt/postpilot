@@ -1,6 +1,7 @@
 import { DraftRejectedError, draftingBudgetMs, generateGroundedDraft } from "./drafting/pipeline";
 import { scheduledPostTime } from "./scheduling/schedules";
-import { abandonedPosts, isLive, listPosts, PostStateError, schedulePost, transitionPost, type QueuedPost } from "./storage/posts";
+import { abandonedPosts, isLive, listPosts, PostStateError, transitionPost, type QueuedPost } from "./storage/posts";
+import { schedulePost } from "./queue-post";
 import { recordAutomationRun, type AutomationRun } from "./storage/runs";
 import { reconcileAutomationSchedules } from "./scheduling/schedules";
 import { linkedInTokenStatus, reconnectWarningDays } from "./linkedin/token";
