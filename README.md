@@ -4,7 +4,7 @@ Self-hosted autopilot for your LinkedIn posts. A few evenings a week postpilot r
 
 It runs on free tiers: Vercel, Upstash Redis and QStash, Groq, Tavily and ntfy. There are no servers to look after and no third-party posting service between you and LinkedIn.
 
-![Dashboard](docs/images/dashboard.svg)
+![Dashboard](docs/images/dashboard.png)
 
 ## How it works
 
@@ -171,7 +171,7 @@ Environment variables hold secrets and infrastructure only.
 
 ## Reviewing and rejecting a draft
 
-![ntfy notification](docs/images/notification.svg)
+![ntfy notification](docs/images/notification.png)
 
 Each queued draft arrives on your ntfy topic with:
 
@@ -183,7 +183,7 @@ Each queued draft arrives on your ntfy topic with:
 
 The review page is read-only on purpose. Anyone who learns the topic name can read and reject drafts, but must never be able to rewrite or publish text under your name. Editing lives on the dashboard, behind `AUTOMATION_SECRET`. Reject links are signed with an HMAC of the post id, so they cannot be guessed for other posts. On iOS the Reject request goes through but the notification stays on screen; open the review page to confirm it took effect.
 
-![Review page](docs/images/review-page.svg)
+![Review page](docs/images/review-page.png)
 
 The same topic also carries:
 
