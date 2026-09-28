@@ -4,8 +4,23 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Changed
+
+- A run stopped by a missing or expired LinkedIn authorization has a status of its own, `stopped`, and reports a failure to the healthcheck instead of a healthy night. A crash reports a failure only on QStash's last retry, so a failure that will be retried no longer pages you. The README now suggests a 45-minute grace period for the check, since the last retry comes about half an hour after the first delivery.
+- The dashboard's Reject and Edit word a refusal like the review page: **Too late** once the publish has started, **Nothing to do** for a post already handled or gone. A Reject of a post that is being published now says **Too late** on the review page too.
+- The LinkedIn client is split into its token store (`src/lib/linkedin/token.ts`) and its publisher (`src/lib/linkedin/publish.ts`). Shared limits live in `src/lib/limits.ts`, and queueing a post's publish message moved out of the post store into `src/lib/queue-post.ts`.
+- Retries and reconnect links are decided by error type rather than by matching error text.
+- The draft prompt reads its theme briefs and the allowed theme ids from the settings it is given, like the rest of the prompt.
+- The validator is one ordered table of checks, and the patterns for invented experience and history have a module of their own.
+- Linting uses type information and fails on an unawaited promise or a switch that misses a case.
+
 ### Fixed
 
+- A post is never published unless its review notice arrived. If ntfy cannot be reached, the run fails and QStash retries it, sending the notice again; on the last retry the post is withdrawn instead of publishing unreviewed.
+- A run that stored the night's post but crashed before queueing its publish message or sending its notice finishes that post on QStash's retry. Before, the retry saw the post, skipped the night, and the post either never published or published without a notice.
+- Every QStash call, from the run, the schedule check and the dashboard's Run now, gives up after 10 seconds. The QStash client takes no abort signal, and a hung call ran until the platform killed the function.
+- When LinkedIn accepted a post and the first write of its record landed but its answer was lost, the retry found the post already `posted` and raised a false "record was not updated" alert.
+- The run history is written with the same compare-and-set as the post queue, so a crash recorded after the run lock is released can no longer overwrite another run's record.
 - The Redis test files run one at a time. Two of them write `postpilot:posts`, and running them in parallel made CI fail at random.
 
 ## [1.1.0] - 2026-09-28

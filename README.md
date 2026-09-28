@@ -45,7 +45,7 @@ Every failure, skipped night and expiring authorization reaches you through the 
 - **Theme rotation.** You define themes and search queries, and the least recently used theme goes first.
 - **Typed configuration.** Everything about what gets posted and when lives in `postpilot.config.ts`, which is validated at startup and reports the field that is wrong.
 - **Dashboard.** Behind Basic auth: a setup check that names every missing variable, authorization status, next run, recent posts and runs with every rejected draft, plus Run now, Reject and Edit.
-- **Operationally boring.** Overlapping runs are locked out, delivery is idempotent, retries use fresh samples, posts that never went out are swept, and a healthchecks.io ping catches a run that never fired.
+- **Operationally boring.** Overlapping runs are locked out, and a post is claimed before it is published, so it can never be posted twice. A run that crashed halfway finishes its post on the retry, retries use fresh samples, posts that never went out are swept, and a healthchecks.io ping catches a run that never fired.
 - **Offline dry run.** `npm run draft -- --offline` runs the whole drafting pipeline on canned data, with no keys and no network.
 
 ## Requirements
@@ -181,7 +181,7 @@ Each queued draft arrives on your ntfy topic with:
 - a **Reject** button that cancels it in one tap;
 - a link to a review page with the text, theme, topic and sources.
 
-**Doing nothing publishes the post.** A rejected post stays in Redis as `cancelled`. Its delayed QStash message still fires, sees that the post is no longer queued, and stops. Once the publish has started, a Reject answers **Too late to reject**: the post is already on its way to LinkedIn. Reject followed by **Run now** on the dashboard drafts a different story for the same morning.
+**Doing nothing publishes the post.** So a post you were never told about never publishes: if its notice cannot reach ntfy, QStash retries the run, which sends it again, and if the last retry cannot deliver it either, the post is withdrawn. A rejected post stays in Redis as `cancelled`. Its delayed QStash message still fires, sees that the post is no longer queued, and stops. Once the publish has started, a Reject answers **Too late**: the post is already on its way to LinkedIn. The dashboard's Reject and Edit say the same. Reject followed by **Run now** on the dashboard drafts a different story for the same morning.
 
 The review page is read-only on purpose. Anyone who learns the topic name can read and reject drafts, but must never be able to rewrite or publish text under your name. Editing lives on the dashboard, behind `AUTOMATION_SECRET`. Reject links are signed with an HMAC of the post id, so they cannot be guessed for other posts. On iOS the Reject request goes through but the notification stays on screen; open the review page to confirm it took effect. If a Reject cannot reach Redis, the page says **Reject failed, try again** and answers with an error, so the ntfy button reports a failure instead of a success; the post stays queued until a retry goes through.
 
@@ -191,9 +191,12 @@ The same topic also carries:
 
 - a high-priority alert, with the reconnect link, when the LinkedIn authorization is missing, expired, or will expire before the next publish, plus a reminder on every run during its last ten days;
 - a low-priority note when a night is skipped, with the reason and the themes tried;
-- an alert when a draft fails validation on the last retry, when a run crashes, when a publish fails, and when a post that never went out is retired.
+- an alert when a draft fails validation on the last retry, when a run crashes, when a publish fails, and when a post that never went out is retired;
+- **Check LinkedIn: a post may have gone out**, when LinkedIn timed out or failed mid-publish and postpilot cannot tell whether the post is live;
+- **The run could not start**, when every QStash delivery found another run for the same morning holding the lock;
+- **LinkedIn automation run failed**, naming the post, when the review notice could not be delivered on any retry and the post was withdrawn. ntfy was likely down, so this alert may not arrive either; the healthcheck below reports the failed run.
 
-To catch a run that never fires at all (a deleted schedule, rotated keys, a broken deploy), create a [healthchecks.io](https://healthchecks.io/) check whose cron and time zone match your schedule (`0 21 * * 0,2,4` in UTC by default), with a 15-minute grace period. Put its ping URL in `HEALTHCHECK_URL`.
+To catch a run that never fires at all (a deleted schedule, rotated keys, a broken deploy), create a [healthchecks.io](https://healthchecks.io/) check whose cron and time zone match your schedule (`0 21 * * 0,2,4` in UTC by default), with a 45-minute grace period: QStash's last retry of a failed run comes about half an hour after the first delivery, and the run pings only once it has an outcome. Put its ping URL in `HEALTHCHECK_URL`. A run that stops because LinkedIn is disconnected reports a failure too.
 
 ## What the validator enforces
 
@@ -232,6 +235,8 @@ Every read of these keys is checked against the shape this version expects. Fiel
 ```bash
 UPSTASH_REDIS_REST_URL=https://... UPSTASH_REDIS_REST_TOKEN=<read-only token> npm run check:data
 ```
+
+Setting variables in front of a command works in bash and zsh but not in PowerShell. Instead, you can put the two values in `.env.local`, which the script loads, run `npm run check:data`, and delete them afterwards.
 
 It reports each key's statuses, the fields it keeps without reading, and anything it cannot read. It never prints a post's text or the token.
 
@@ -273,6 +278,7 @@ On the dashboard's run history: every rejected draft is listed next to the rule 
 | "Check LinkedIn: a post may have gone out" | LinkedIn timed out or failed mid-publish, so postpilot cannot tell whether the post is live. It is never retried, to avoid posting twice. | Look for the post on LinkedIn; post it by hand only if it is missing. |
 | "A LinkedIn post may or may not have gone out" | A publish was cut off mid-call and no later delivery settled it, so the evening run retired it. | Look for the post on LinkedIn; post it by hand only if it is missing. |
 | "LinkedIn published the post, but its record was not updated" | LinkedIn has the post, but Redis could not record it. | Nothing: the post went out. The alert names its LinkedIn id. |
+| "LinkedIn automation run failed" naming a withdrawn post | The review notice could not be delivered on any retry, so the post was withdrawn instead of publishing unreviewed. | Check ntfy's status. Press **Run now** once it is back, if the morning is still ahead. |
 | "Reject failed, try again" | Redis could not be reached, so the post is still queued. | Tap **Try again**. If it keeps failing, check Upstash's status and reject from the dashboard once it is back. |
 | "The run could not start" | Every QStash delivery found another run for the same morning holding the lock. | Check the dashboard for tonight's post; if there is none, press **Run now**. |
 | "postpilot:posts holds a post this version cannot read" | The queue holds a record this version doesn't understand, for example one written by a newer version. Nothing was changed. | Run `npm run check:data` to see which field, then deploy the version that wrote it. |
