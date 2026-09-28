@@ -310,5 +310,5 @@ test("a short draft is told how many words to add", () => {
   const text = `${hook}\n\n${filler.repeat(3)}\n\n${question}`;
   const target = Math.round((config().limits.minWords + config().limits.maxWords) / 2);
   const words = text.split(/\s+/).length;
-  assert.throws(() => validateDraft(draft(text), now), new RegExp(`received ${words}\. Add about ${target - words} words`));
+  assert.throws(() => validateDraft(draft(text), now), new RegExp(`received ${words}\\. Add about ${target - words} words`));
 });
