@@ -209,6 +209,21 @@ test("once LinkedIn has the post, a failed record write is retried once", async 
   assert.equal(read()[0]!.status, "posted");
 });
 
+test("a record write that landed although its answer was lost raises no alert", async () => {
+  const { deps, calls, read } = fakes();
+  const write = deps.transitionPost;
+  let finishes = 0;
+  deps.transitionPost = async (id, from, patch) => {
+    const written = await write(id, from, patch);
+    if (patch.status === "posted" && (finishes += 1) === 1) throw new Error("fetch failed");
+    return written;
+  };
+  const response = await handlePublish(delivery(), deps);
+  assert.deepEqual(await response.json(), { published: true, id: "p1", linkedinPostId: "urn:li:share:1" });
+  assert.equal(read()[0]!.status, "posted");
+  assert.deepEqual(calls.alerts, []);
+});
+
 test("when the record still cannot be written, the alert says LinkedIn has the post", async () => {
   const { deps, calls } = fakes();
   const write = deps.transitionPost;

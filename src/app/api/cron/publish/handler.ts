@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { listPosts, PostNotQueuedError, staleClaimMs, transitionPost } from "@/lib/storage/posts";
+import { listPosts, PostNotQueuedError, PostStateError, staleClaimMs, transitionPost } from "@/lib/storage/posts";
 import { LinkedInPublishError, publishTextPost } from "@/lib/linkedin/publish";
 import { connectUrl } from "@/lib/linkedin/oauth";
 import { notifyOperator } from "@/lib/notify/ntfy";
@@ -85,8 +85,13 @@ export async function handlePublish(request: Request, overrides: Partial<Publish
   const posted = { status: "posted" as const, postedAt: deps.clock().toISOString(), linkedinPostId, error: undefined };
   // "failed" too: a delivery that gave up on this one as unknown is overruled by LinkedIn's answer.
   const recordPosted = () => deps.transitionPost(postId, ["publishing", "failed"], posted);
+  // A write whose answer was lost may have landed: the retry then finds the post posted,
+  // and only this delivery can have posted it, since it holds the claim.
+  const recordPostedAgain = () => recordPosted().catch((error: unknown) => {
+    if (!(error instanceof PostStateError && error.status === "posted")) throw error;
+  });
   try {
-    await recordPosted().catch(recordPosted);
+    await recordPosted().catch(recordPostedAgain);
   } catch (error) {
     console.error("Post published but its record could not be updated:", errorMessage(error));
     await deps.notifyOperator({
