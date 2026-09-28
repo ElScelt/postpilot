@@ -107,3 +107,11 @@ test("an edit and a Reject that land together both survive", async () => {
   assert.equal(a!.text, "Edited.");
   assert.equal(b!.status, "cancelled", "the edit must not write back its stale copy of b");
 });
+
+test("a post on its way to LinkedIn is kept and blocks a second post for its day", async () => {
+  const terminal = Array.from({ length: 210 }, (_, index) => post({ id: `t${index}`, status: "posted", scheduledFor: "2030-01-01T06:00:00.000Z" }));
+  const publishing = post({ id: "p", status: "publishing", scheduledFor: "2020-01-01T06:00:00.000Z" });
+  assert.ok(retainPosts([...terminal, publishing]).some((entry) => entry.id === "p"));
+  const { store } = fakeStore([post({ status: "publishing" })]);
+  await assert.rejects(() => addPost("again", "2026-09-07T08:00:00.000Z", undefined, { store }), /already queued/);
+});

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { escapeCommentary, linkedInApiVersions, linkedInTokenStatus, publishTextPost, requireToken } from "../src/lib/linkedin/api";
+import { escapeCommentary, LinkedInPublishError, linkedInApiVersions, linkedInTokenStatus, publishTextPost, requireToken } from "../src/lib/linkedin/api";
 
 const day = 86_400_000;
 const now = Date.parse("2026-07-29T00:00:00Z");
@@ -98,4 +98,24 @@ test("falls back to the previous API version when LinkedIn answers 426", async (
   };
   assert.equal(await publishTextPost("text", fetcher, store(Date.now() + day)), "urn:li:share:9");
   assert.deepEqual(versions, [...linkedInApiVersions]);
+});
+
+test("a publish is only called rejected when LinkedIn cannot have the post", async () => {
+  const outcome = async (fetcher: typeof fetch, expiresAt = Date.now() + day) =>
+    publishTextPost("text", fetcher, store(expiresAt)).then(() => "published", (error: LinkedInPublishError) => error.outcome);
+  const answer = (status: number) => async () => new Response("x", { status });
+  assert.equal(await outcome(answer(422)), "rejected");
+  assert.equal(await outcome(answer(429)), "rejected");
+  assert.equal(await outcome(answer(502)), "rejected");
+  assert.equal(await outcome(answer(503)), "rejected");
+  assert.equal(await outcome(answer(500)), "unknown");
+  assert.equal(await outcome(answer(504)), "unknown");
+  assert.equal(await outcome(async () => { throw new DOMException("The operation was aborted due to timeout", "TimeoutError"); }), "unknown");
+  assert.equal(await outcome(async () => { throw new Error("must not be called"); }, Date.now() - day), "rejected", "an expired token sends nothing");
+});
+
+test("the publish call gives up before the publish route is killed", async () => {
+  let signal: AbortSignal | null | undefined;
+  await publishTextPost("text", async (_input, init) => { signal = init?.signal; return new Response("", { status: 201 }); }, store(Date.now() + day));
+  assert.ok(signal instanceof AbortSignal);
 });

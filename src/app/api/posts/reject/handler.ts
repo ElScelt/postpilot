@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { cancelPost, listPosts, PostNotQueuedError } from "@/lib/storage/posts";
+import { cancelPost, listPosts, PostNotQueuedError, type QueuedPost } from "@/lib/storage/posts";
 import { errorMessage } from "@/lib/errors";
 import { formatDateTime } from "@/lib/scheduling/time";
 import { buttonStyle, escapeHtml, invalidLinkPage, page, rejectTarget } from "./html";
@@ -23,9 +23,7 @@ export async function handleReviewPage(request: NextRequest, overrides: Partial<
   if (!id) return invalidLinkPage();
   const post = (await deps.listPosts()).find((entry) => entry.id === id);
   if (!post) return page("Not found", "<h1>That post no longer exists</h1>");
-  if (post.status !== "queued") {
-    return page("Already handled", `<h1>Nothing to do</h1><p>This post is already <b>${escapeHtml(post.status)}</b>.</p>`);
-  }
+  if (post.status !== "queued") return alreadyHandledPage(post.status);
   const meta = post.automation
     ? `<p style="color:#52525b">${escapeHtml([post.automation.theme, post.automation.topic].filter(Boolean).join(" · "))}</p>`
     : "";
@@ -40,6 +38,15 @@ export async function handleReviewPage(request: NextRequest, overrides: Partial<
     <pre style="white-space:pre-wrap;font:inherit;background:#f4f4f5;padding:1rem;border-radius:.5rem">${escapeHtml(post.text)}</pre>
     ${sources}
     ${rejectForm(request, "Reject this post")}`);
+}
+
+// A post that is being published can no longer be stopped; saying "already publishing"
+// would read as if the Reject might still count.
+function alreadyHandledPage(status: QueuedPost["status"]) {
+  if (status === "publishing") {
+    return page("Too late", "<h1>Too late to reject</h1><p>This post is being published to LinkedIn right now.</p>");
+  }
+  return page("Already handled", `<h1>Nothing to do</h1><p>This post is already <b>${escapeHtml(status)}</b>.</p>`);
 }
 
 function rejectForm(request: NextRequest, label: string) {
@@ -58,9 +65,9 @@ export async function handleReject(request: NextRequest, overrides: Partial<Reje
     return page("Rejected", "<h1>Rejected</h1><p>This post will not be published.</p>");
   } catch (error) {
     if (error instanceof PostNotQueuedError) {
-      return page("Already handled", error.status
-        ? `<h1>Nothing to do</h1><p>This post is already <b>${escapeHtml(error.status)}</b>.</p>`
-        : "<h1>Nothing to do</h1><p>That post no longer exists.</p>");
+      return error.status
+        ? alreadyHandledPage(error.status)
+        : page("Already handled", "<h1>Nothing to do</h1><p>That post no longer exists.</p>");
     }
     // Anything else, typically Redis being unreachable, left the post queued. Saying so
     // with a 500 is what makes the ntfy button report a failure instead of a success.

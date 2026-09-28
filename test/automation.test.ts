@@ -99,6 +99,13 @@ test("skips drafting when a post for tomorrow's slot already exists", async () =
   assert.equal(calls.scheduled.length, 0);
 });
 
+test("a post being published for tomorrow's slot also counts as tomorrow's post", async () => {
+  const { deps, calls } = fakes({ posts: [post({ id: "going", status: "publishing", scheduledFor: "2026-09-07T06:00:00.000Z" })] });
+  const result = await runAutomation(now, deps);
+  assert.equal(result.status, "skipped");
+  assert.equal(calls.drafted.length, 0);
+});
+
 test("still drafts when schedule reconciliation throws", async () => {
   const { deps, calls } = fakes({ reconcile: async () => { throw new Error("QStash 500"); } });
   const result = await runAutomation(now, deps);

@@ -1,5 +1,5 @@
 import { versionedStore, type VersionedStore } from "./redis";
-import { deliveryTimestamp, publishRetries, qstash, publishingUrl } from "../scheduling/qstash";
+import { deliveryTimestamp, publishRetries, publishTimeLimitSeconds, qstash, publishingUrl } from "../scheduling/qstash";
 import type { ResearchSource } from "../drafting/types";
 import { errorMessage } from "../errors";
 
@@ -14,8 +14,12 @@ export type QueuedPost = {
   id: string;
   text: string;
   scheduledFor: string;
-  status: "queued" | "posted" | "cancelled" | "failed";
+  // "publishing" is held from the moment a delivery claims the post until LinkedIn's
+  // answer is recorded, so a Reject or an edit can never land in between.
+  status: "queued" | "publishing" | "posted" | "cancelled" | "failed";
   createdAt: string;
+  // When a delivery claimed the post for publishing.
+  claimedAt?: string;
   postedAt?: string;
   // Set when the owner rewrote the draft on the dashboard before it went out.
   originalText?: string;
@@ -26,7 +30,16 @@ export type QueuedPost = {
   automation?: AutomationMetadata;
 };
 
-export const postStatuses: QueuedPost["status"][] = ["queued", "posted", "cancelled", "failed"];
+export const postStatuses: QueuedPost["status"][] = ["queued", "publishing", "posted", "cancelled", "failed"];
+
+// Queued or on its way to LinkedIn: the post may still go out.
+export function isLive(post: QueuedPost) {
+  return post.status === "queued" || post.status === "publishing";
+}
+
+// A delivery that claimed a post is finished or killed once the publish route's time
+// limit has passed; a minute on top covers the clocks of two different functions.
+export const staleClaimMs = publishTimeLimitSeconds * 1000 + 60_000;
 
 // The two collaborators the store needs, injectable so tests run without Upstash.
 export type PostStoreDeps = {
@@ -63,8 +76,8 @@ export function abandonedPosts(posts: QueuedPost[], now: Date) {
 }
 
 export function retainPosts(posts: QueuedPost[]) {
-  const queued = posts.filter((post) => post.status === "queued");
-  const terminal = posts.filter((post) => post.status !== "queued")
+  const queued = posts.filter(isLive);
+  const terminal = posts.filter((post) => !isLive(post))
     .sort((a, b) => a.scheduledFor.localeCompare(b.scheduledFor))
     .slice(-retainedTerminalPosts);
   return [...queued, ...terminal].sort((a, b) => a.scheduledFor.localeCompare(b.scheduledFor));
@@ -94,7 +107,7 @@ export async function addPost(text: string, scheduledFor: string, automation?: A
   };
   const day = scheduledFor.slice(0, 10);
   return mutatePosts((posts) => {
-    if (posts.some((existing) => existing.status === "queued" && existing.scheduledFor.slice(0, 10) === day)) {
+    if (posts.some((existing) => isLive(existing) && existing.scheduledFor.slice(0, 10) === day)) {
       throw new Error("A LinkedIn post is already queued for that UTC day.");
     }
     posts.push({ ...post });

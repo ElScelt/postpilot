@@ -84,3 +84,12 @@ test("a post the history no longer holds is reported as gone", async () => {
   assert.equal(response.status, 200);
   assert.match(await response.text(), /no longer exists/);
 });
+
+test("a post being published is too late to reject, and the page says so", async () => {
+  const { deps } = fakes([post({ status: "publishing" })]);
+  const html = await (await handleReject(reviewRequest("p1", "POST"), deps)).text();
+  assert.match(html, /Too late to reject/);
+  const review = await (await handleReviewPage(reviewRequest("p1", "GET"), deps)).text();
+  assert.match(review, /being published/);
+  assert.doesNotMatch(review, /<form/, "no Reject button for a post already on its way");
+});

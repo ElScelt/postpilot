@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { listPosts, transitionPost } from "@/lib/storage/posts";
-import { publishTextPost } from "@/lib/linkedin/api";
+import { listPosts, PostNotQueuedError, staleClaimMs, transitionPost } from "@/lib/storage/posts";
+import { LinkedInPublishError, publishTextPost } from "@/lib/linkedin/api";
 import { connectUrl } from "@/lib/linkedin/oauth";
 import { notifyOperator } from "@/lib/notify/ntfy";
 import { authorizeQStashRequest, verifyQStashSignature } from "@/lib/security/request-auth";
@@ -17,10 +17,11 @@ export type PublishDeps = {
   publishTextPost: typeof publishTextPost;
   notifyOperator: typeof notifyOperator;
   verifySignature: typeof verifyQStashSignature;
+  clock: () => Date;
 };
 
 const productionDeps: PublishDeps = {
-  listPosts, transitionPost, publishTextPost, notifyOperator, verifySignature: verifyQStashSignature,
+  listPosts, transitionPost, publishTextPost, notifyOperator, verifySignature: verifyQStashSignature, clock: () => new Date(),
 };
 
 const requestSchema = z.object({ postId: z.string().min(1) });
@@ -33,39 +34,90 @@ function parsePostId(body: string) {
   }
 }
 
+// A post goes to LinkedIn at most once. The delivery first claims it (queued to
+// publishing), so a Reject, an edit or a second delivery cannot slip in while LinkedIn
+// is answering. What happens next depends on whether LinkedIn can have the post:
+//   - it has it: the post is marked posted, and the answer is 2xx whatever happens to
+//     that write, because a 5xx would make QStash publish it again;
+//   - it cannot have it: the post goes back to the queue and QStash retries;
+//   - nobody knows (a timeout, a broken connection, a server error): the post is marked
+//     failed, the owner is told to check LinkedIn, and it is never retried.
 export async function handlePublish(request: Request, overrides: Partial<PublishDeps> = {}) {
   const deps = { ...productionDeps, ...overrides };
   const body = await request.text();
   if (!(await authorizeQStashRequest(request, body, deps.verifySignature))) return new NextResponse("Unauthorized", { status: 401 });
   const postId = parsePostId(body);
   if (!postId) return new NextResponse("Missing post id", { status: 400 });
-  const due = (await deps.listPosts()).find((post) => post.id === postId && post.status === "queued");
-  if (!due) return NextResponse.json({ published: false, message: "Post was already handled." });
+  const { attempt, final } = deliveryAttempt(request, publishRetries);
+
+  let claimed;
   try {
-    due.linkedinPostId = await deps.publishTextPost(due.text);
+    claimed = await deps.transitionPost(postId, ["queued"], { status: "publishing", claimedAt: deps.clock().toISOString() });
   } catch (error) {
-    // Stay queued so QStash can retry. The next automation run retires it if every
-    // attempt failed, which is what stops a dead token from looking like pending work.
-    due.error = errorMessage(error);
-    await deps.transitionPost(due.id, ["queued"], { error: due.error });
-    const { attempt, final } = deliveryAttempt(request, publishRetries);
-    await deps.notifyOperator({
-      title: `LinkedIn publish failed (attempt ${attempt})`,
-      body: `${due.error} The post scheduled for ${formatDateTime(due.scheduledFor)} is still queued${final ? " and QStash has given up" : " and QStash will retry"}.`,
-      priority: final ? 5 : 3,
-      link: /authoriz/i.test(due.error) ? connectUrl() : undefined,
-    });
-    return NextResponse.json({ published: false, id: due.id, error: due.error }, { status: 502 });
+    if (!(error instanceof PostNotQueuedError)) throw error;
+    if (error.status === "publishing") return earlierClaim(postId, final, deps);
+    return NextResponse.json({ published: false, message: "Post was already handled." });
   }
-  // LinkedIn has the post now. Whatever happens to the bookkeeping, this delivery must
-  // answer 2xx, or the retry would publish the same text again.
+
+  let linkedinPostId: string;
   try {
-    await deps.transitionPost(due.id, ["queued"], {
-      status: "posted", postedAt: new Date().toISOString(), linkedinPostId: due.linkedinPostId, error: undefined,
-    });
+    linkedinPostId = await deps.publishTextPost(claimed.text);
+  } catch (error) {
+    const message = errorMessage(error);
+    if (error instanceof LinkedInPublishError && error.outcome === "rejected") {
+      // LinkedIn cannot have it, so it goes back to the queue for QStash to retry. The next
+      // automation run retires it if every attempt failed, which is what stops a dead
+      // token from looking like pending work.
+      await deps.transitionPost(postId, ["publishing"], { status: "queued", claimedAt: undefined, error: message });
+      await deps.notifyOperator({
+        title: `LinkedIn publish failed (attempt ${attempt})`,
+        body: `${message} The post scheduled for ${formatDateTime(claimed.scheduledFor)} is still queued${final ? " and QStash has given up" : " and QStash will retry"}.`,
+        priority: final ? 5 : 3,
+        link: /authoriz/i.test(message) ? connectUrl() : undefined,
+      });
+      return NextResponse.json({ published: false, id: postId, error: message }, { status: 502 });
+    }
+    await markOutcomeUnknown(postId, claimed.scheduledFor, `LinkedIn did not confirm the post (${message})`, deps);
+    return NextResponse.json({ published: "unknown", id: postId, error: message });
+  }
+
+  const posted = { status: "posted" as const, postedAt: deps.clock().toISOString(), linkedinPostId, error: undefined };
+  // "failed" too: a delivery that gave up on this one as unknown is overruled by LinkedIn's answer.
+  const recordPosted = () => deps.transitionPost(postId, ["publishing", "failed"], posted);
+  try {
+    await recordPosted().catch(recordPosted);
   } catch (error) {
     console.error("Post published but its record could not be updated:", errorMessage(error));
-    return NextResponse.json({ published: true, id: due.id, linkedinPostId: due.linkedinPostId, persisted: false });
+    await deps.notifyOperator({
+      title: "LinkedIn published the post, but its record was not updated",
+      body: `LinkedIn confirmed the post scheduled for ${formatDateTime(claimed.scheduledFor)} as ${linkedinPostId}. The dashboard may show it as publishing or failed; it went out. (${errorMessage(error)})`,
+      priority: 4,
+    });
+    return NextResponse.json({ published: true, id: postId, linkedinPostId, persisted: false });
   }
-  return NextResponse.json({ published: true, id: due.id, linkedinPostId: due.linkedinPostId });
+  return NextResponse.json({ published: true, id: postId, linkedinPostId });
+}
+
+// Another delivery claimed the post and never recorded LinkedIn's answer. While that
+// delivery may still be running, QStash is asked to come back; once it cannot be, the
+// post may or may not be on LinkedIn, so it is retired with an alert and never resent.
+async function earlierClaim(postId: string, final: boolean, deps: PublishDeps) {
+  const post = (await deps.listPosts()).find((entry) => entry.id === postId);
+  if (!post || post.status !== "publishing") return NextResponse.json({ published: false, message: "Post was already handled." });
+  const claimedAt = post.claimedAt ? Date.parse(post.claimedAt) : 0;
+  if (!final && deps.clock().getTime() - claimedAt < staleClaimMs) {
+    return NextResponse.json({ published: false, message: "Another delivery is publishing this post." }, { status: 503 });
+  }
+  await markOutcomeUnknown(postId, post.scheduledFor, "A delivery stopped while publishing the post", deps);
+  return NextResponse.json({ published: "unknown", id: postId });
+}
+
+async function markOutcomeUnknown(postId: string, scheduledFor: string, what: string, deps: PublishDeps) {
+  const error = `${what}; it may be live. It will not be retried.`;
+  await deps.transitionPost(postId, ["publishing"], { status: "failed", error });
+  await deps.notifyOperator({
+    title: "Check LinkedIn: a post may have gone out",
+    body: `${error} Look for the post scheduled for ${formatDateTime(scheduledFor)} on LinkedIn, and post it by hand only if it is not there.`,
+    priority: 5,
+  });
 }

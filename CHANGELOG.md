@@ -10,6 +10,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Fixed
 
+- The publish route claims a post before calling LinkedIn, so a Reject that arrives mid-publish says it is too late instead of reporting success and being overwritten. A LinkedIn call that times out or fails in a way that may have saved the post is never retried; you get an alert to check LinkedIn. Before, a hung LinkedIn call left the post queued and QStash's retry could post it twice.
+- When LinkedIn accepts a post but its record cannot be written, the write is retried once and the alert names the LinkedIn post id.
 - Every write to the post queue is a compare-and-set, so concurrent writers no longer undo each other: a dashboard edit, a Reject and the publish route used to be able to write back stale copies of the whole queue.
 - The drafting deadline is derived from the run route's time limit, and every Tavily and Groq request, as well as every wait on Groq's rate limit, ends at it. One slow call used to be able to carry the run past the limit, where it was killed without a record.
 - Calls to ntfy, healthchecks.io, Tavily, Groq, Redis and LinkedIn's sign-in endpoints time out instead of waiting until the platform kills the function.

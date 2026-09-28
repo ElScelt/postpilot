@@ -1,6 +1,6 @@
 import { DraftRejectedError, draftingBudgetMs, generateGroundedDraft } from "./drafting/pipeline";
 import { scheduledPostTime } from "./scheduling/schedules";
-import { abandonedPosts, listPosts, PostNotQueuedError, schedulePost, transitionPost, type QueuedPost } from "./storage/posts";
+import { abandonedPosts, isLive, listPosts, PostNotQueuedError, schedulePost, transitionPost, type QueuedPost } from "./storage/posts";
 import { recordAutomationRun } from "./storage/runs";
 import { reconcileAutomationSchedules } from "./scheduling/schedules";
 import { linkedInTokenStatus } from "./linkedin/api";
@@ -149,7 +149,7 @@ export async function runAutomation(
     const duplicate = posts.find((post) =>
       post.automation !== undefined
       && post.scheduledFor.slice(0, 10) === scheduledFor.toISOString().slice(0, 10)
-      && (post.status === "queued" || post.status === "posted"),
+      && (isLive(post) || post.status === "posted"),
     );
     if (duplicate) {
       const reason = `Automation already created post ${duplicate.id}.`;

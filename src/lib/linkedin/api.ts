@@ -1,4 +1,5 @@
 import { redis, type KeyValueStore } from "../storage/redis";
+import { errorMessage } from "../errors";
 
 type TokenReader = Pick<KeyValueStore, "get">;
 
@@ -57,6 +58,26 @@ export async function linkedInTokenStatus(now = Date.now(), client: TokenReader 
   return { state: token.expiresAt <= now ? "expired" : "valid", daysRemaining };
 }
 
+// Why a publish failed, as far as it matters for trying again. "rejected" means
+// LinkedIn cannot have the post: nothing was sent, or LinkedIn refused it or was briefly
+// unavailable. "unknown" means LinkedIn may have accepted it: the call timed out or
+// broke, or LinkedIn failed in a way it may have after saving the post. Retrying an
+// unknown outcome risks posting the same text twice.
+export class LinkedInPublishError extends Error {
+  constructor(message: string, readonly outcome: "rejected" | "unknown") {
+    super(message);
+    this.name = "LinkedInPublishError";
+  }
+}
+
+function publishOutcome(status: number) {
+  return (status >= 400 && status < 500) || status === 502 || status === 503 ? "rejected" : "unknown";
+}
+
+// Long enough for LinkedIn's slowest ordinary answer, and well inside the publish
+// route's own limit so the timeout is recorded before the platform kills the route.
+const publishTimeoutMs = 20_000;
+
 export async function requireToken(client: TokenReader = redis()) {
   const token = await loadLinkedInToken(client);
   if (!token) throw new Error("LinkedIn is not connected. Visit /api/auth/linkedin first.");
@@ -77,9 +98,15 @@ export async function saveLinkedInToken(token: TokenRecord, store: KeyValueStore
 }
 
 export async function publishTextPost(text: string, fetcher: typeof fetch = fetch, client: TokenReader = redis()) {
-  const token = await requireToken(client);
+  let token: TokenRecord;
+  try {
+    token = await requireToken(client);
+  } catch (error) {
+    throw new LinkedInPublishError(errorMessage(error), "rejected");
+  }
   const response = await linkedInFetch("https://api.linkedin.com/rest/posts", {
     method: "POST",
+    signal: AbortSignal.timeout(publishTimeoutMs),
     body: JSON.stringify({
       author: `urn:li:person:${token.memberId}`,
       commentary: escapeCommentary(text),
@@ -88,7 +115,12 @@ export async function publishTextPost(text: string, fetcher: typeof fetch = fetc
       lifecycleState: "PUBLISHED",
       isReshareDisabledByAuthor: false,
     }),
-  }, token.accessToken, fetcher);
-  if (!response.ok) throw new Error(`LinkedIn rejected the post (${response.status}): ${await response.text()}`);
+  }, token.accessToken, fetcher).catch((error: unknown) => {
+    throw new LinkedInPublishError(`LinkedIn did not answer: ${errorMessage(error)}`, "unknown");
+  });
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw new LinkedInPublishError(`LinkedIn rejected the post (${response.status}): ${body}`, publishOutcome(response.status));
+  }
   return response.headers.get("x-restli-id") ?? "published";
 }

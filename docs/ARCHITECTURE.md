@@ -76,7 +76,12 @@ A draft that fails validation twice answers 500, so QStash retries with a fresh 
 - `src/lib/notify/ntfy.ts` sends the draft with a signed Reject link (`src/lib/security/reject-token.ts`).
 - `src/lib/storage/posts.ts` keeps every post in one JSON array under `postpilot:posts`. Every write reads the array, changes it and commits it with a compare-and-set script, and starts over if another writer got there first, so concurrent writers never undo each other.
 - `src/app/api/posts/reject/` shows the read-only review page (GET) and cancels the post (POST). A GET never cancels, so link prefetching can't kill a post.
-- `src/app/api/cron/publish/route.ts` receives the delayed QStash message. It checks the post is still queued and publishes through `src/lib/linkedin/api.ts`. If a version answers 426, the next LinkedIn API version is tried. Once LinkedIn accepts the post, the route answers 2xx even if bookkeeping fails, so a retry can never post twice.
+- `src/app/api/cron/publish/` receives the delayed QStash message. It claims the post (`queued` → `publishing`) before calling LinkedIn through `src/lib/linkedin/api.ts`, so a Reject or an edit that arrives mid-call is refused rather than silently lost. If a version answers 426, the next LinkedIn API version is tried. What happens next depends on whether LinkedIn can have the post:
+  - **accepted:** the post is marked `posted`. The route answers 2xx even if that write fails twice, so a retry can never post twice; the alert then names the LinkedIn post id.
+  - **refused** (no token, any 4xx, 502 or 503): the post goes back to `queued` and the route answers 502, so QStash retries.
+  - **unknown** (a timeout after 20 seconds, a broken connection, 500, 504 or another 5xx): the post is marked `failed`, you are told to check LinkedIn, and it is never retried.
+
+  A delivery that finds the post already `publishing` answers 503 while the earlier delivery may still be running, and retires it as unknown once it cannot be.
 
 ## Folder layout
 

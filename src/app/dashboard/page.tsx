@@ -33,7 +33,7 @@ const levelColor: Record<SetupCheck["level"], string> = { error: "#991b1b", warn
 
 function statusTone(status: string): "ok" | "warn" | "bad" | "idle" {
   if (status === "posted" || status === "scheduled") return "ok";
-  if (status === "queued" || status === "skipped") return "warn";
+  if (status === "queued" || status === "publishing" || status === "skipped") return "warn";
   if (status === "failed") return "bad";
   return "idle";
 }
