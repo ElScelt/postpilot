@@ -3,7 +3,7 @@ import { scheduledPostTime } from "./scheduling/schedules";
 import { abandonedPosts, isLive, listPosts, PostStateError, schedulePost, transitionPost, type QueuedPost } from "./storage/posts";
 import { recordAutomationRun, type AutomationRun } from "./storage/runs";
 import { reconcileAutomationSchedules } from "./scheduling/schedules";
-import { linkedInTokenStatus, reconnectWarningDays } from "./linkedin/api";
+import { linkedInTokenStatus, reconnectWarningDays } from "./linkedin/token";
 import { notifyDraftQueued, notifyOperator } from "./notify/ntfy";
 import { appUrl, envValue } from "./env";
 import { connectUrl } from "./linkedin/oauth";

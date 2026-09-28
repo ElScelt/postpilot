@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { validState } from "@/lib/linkedin/oauth";
 import { envValue, required } from "@/lib/env";
-import { loadLinkedInToken, saveLinkedInToken } from "@/lib/linkedin/api";
+import { loadLinkedInToken, saveLinkedInToken } from "@/lib/linkedin/token";
 import { formatDay } from "@/lib/scheduling/time";
 
 // Everything the callback calls, injectable so tests drive the handler with fakes.

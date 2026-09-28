@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
 import { handleLinkedInCallback, type CallbackDeps } from "../src/app/api/auth/linkedin/callback/handler";
 import { signedState } from "../src/lib/linkedin/oauth";
-import type { TokenRecord } from "../src/lib/linkedin/api";
+import type { TokenRecord } from "../src/lib/linkedin/token";
 
 process.env.LINKEDIN_STATE_SECRET = "state-secret";
 process.env.LINKEDIN_REDIRECT_URI = "https://example.vercel.app/api/auth/linkedin/callback";

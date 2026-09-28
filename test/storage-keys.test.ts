@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { loadLinkedInToken, saveLinkedInToken } from "../src/lib/linkedin/api";
+import { loadLinkedInToken, saveLinkedInToken } from "../src/lib/linkedin/token";
 import { runScheduleId } from "../src/lib/scheduling/schedules";
 import { listPosts, transitionPost } from "../src/lib/storage/posts";
 import type { KeyValueStore, VersionedStore } from "../src/lib/storage/redis";

@@ -1,21 +1,6 @@
-import { z } from "zod";
-import { redis, type KeyValueStore } from "../storage/redis";
+import { requireToken, type TokenReader, type TokenRecord } from "./token";
+import { redis } from "../storage/redis";
 import { errorMessage } from "../errors";
-import { dayMs } from "../scheduling/time";
-
-type TokenReader = Pick<KeyValueStore, "get">;
-
-export type TokenRecord = { accessToken: string; memberId: string; expiresAt: number; connectedAt?: number };
-
-export const tokenSchema = z.looseObject({
-  accessToken: z.string(), memberId: z.string(), expiresAt: z.number(), connectedAt: z.number().optional(),
-}) satisfies z.ZodType<TokenRecord>;
-
-export type TokenStatus =
-  | { state: "missing" }
-  | { state: "expired" | "valid"; daysRemaining: number };
-
-const tokenKey = "postpilot:token";
 
 // LinkedIn supports each YYYYMM version for at least a year and then answers 426
 // NONEXISTENT_VERSION. The newest version comes first; when LinkedIn rejects it the
@@ -50,38 +35,12 @@ export async function linkedInFetch(
   return response!;
 }
 
-export async function loadLinkedInToken(client: TokenReader = redis()): Promise<TokenRecord | null> {
-  const stored = await client.get<unknown>(tokenKey);
-  if (stored === null) return null;
-  const result = tokenSchema.safeParse(stored);
-  // The callback reads the stored member to decide who may reconnect, so with
-  // LINKEDIN_MEMBER_ID set it skips this read and the new token replaces the old one.
-  if (!result.success) {
-    throw new Error(`${tokenKey} holds an authorization this version cannot read. Set LINKEDIN_MEMBER_ID and reconnect LinkedIn to replace it.`);
-  }
-  return result.data;
-}
+// LinkedIn parses commentary as little text format. Every reserved character must be
+// backslash-escaped or the parser silently drops the rest of the post.
+const reservedCharacters = /[\\|{}@[\]()<>#*_~]/g;
 
-// How early the run alerts and the dashboard warns that the authorization is running out:
-// enough notice to reconnect on a convenient evening.
-export const reconnectWarningDays = 10;
-
-// LinkedIn issues no refresh token for w_member_social, so the only recovery is walking
-// the consent flow again. Surfacing the countdown is the difference between a planned
-// reconnect and a fortnight of runs that queue posts nothing can publish.
-export async function linkedInTokenStatus(now = Date.now(), client: TokenReader = redis()): Promise<TokenStatus> {
-  const token = await loadLinkedInToken(client);
-  if (!token) return { state: "missing" };
-  const daysRemaining = Math.floor((token.expiresAt - now) / dayMs);
-  return { state: token.expiresAt <= now ? "expired" : "valid", daysRemaining };
-}
-
-// The authorization as one line for the dashboard, with how urgently it needs a reconnect.
-export function tokenSummary(token: TokenStatus): { tone: "ok" | "warn" | "bad"; text: string } {
-  if (token.state === "missing") return { tone: "bad", text: "LinkedIn is not connected." };
-  if (token.state === "expired") return { tone: "bad", text: `LinkedIn authorization expired ${Math.abs(token.daysRemaining)} days ago.` };
-  if (token.daysRemaining <= reconnectWarningDays) return { tone: "warn", text: `LinkedIn authorization expires in ${token.daysRemaining} days.` };
-  return { tone: "ok", text: `LinkedIn authorization valid for ${token.daysRemaining} more days.` };
+export function escapeCommentary(text: string) {
+  return text.replace(reservedCharacters, (character) => `\\${character}`);
 }
 
 // Why a publish failed, as far as it matters for trying again. "rejected" means
@@ -103,25 +62,6 @@ function publishOutcome(status: number) {
 // Long enough for LinkedIn's slowest ordinary answer, and well inside the publish
 // route's own limit so the timeout is recorded before the platform kills the route.
 const publishTimeoutMs = 20_000;
-
-export async function requireToken(client: TokenReader = redis()) {
-  const token = await loadLinkedInToken(client);
-  if (!token) throw new Error("LinkedIn is not connected. Visit /api/auth/linkedin first.");
-  if (token.expiresAt <= Date.now()) throw new Error("LinkedIn authorization expired. Reconnect LinkedIn.");
-  return token;
-}
-
-// LinkedIn parses commentary as little text format. Every reserved character must be
-// backslash-escaped or the parser silently drops the rest of the post.
-const reservedCharacters = /[\\|{}@[\]()<>#*_~]/g;
-
-export function escapeCommentary(text: string) {
-  return text.replace(reservedCharacters, (character) => `\\${character}`);
-}
-
-export async function saveLinkedInToken(token: TokenRecord, store: KeyValueStore = redis()) {
-  await store.set(tokenKey, token);
-}
 
 export async function publishTextPost(text: string, fetcher: typeof fetch = fetch, client: TokenReader = redis()) {
   let token: TokenRecord;

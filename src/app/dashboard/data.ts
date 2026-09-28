@@ -1,7 +1,7 @@
 import { listAutomationRuns } from "@/lib/storage/runs";
 import { describeLiveSchedule } from "@/lib/scheduling/schedules";
 import { checkSetup, type SetupCheck } from "@/lib/setup-check";
-import { linkedInTokenStatus, loadLinkedInToken, type TokenStatus } from "@/lib/linkedin/api";
+import { linkedInTokenStatus, loadLinkedInToken, reconnectWarningDays, type TokenStatus } from "@/lib/linkedin/token";
 import { listPosts } from "@/lib/storage/posts";
 import type { Environment } from "@/lib/env";
 import { errorMessage } from "@/lib/errors";
@@ -50,4 +50,12 @@ export async function loadDashboard(now: Date, servingHost: string | undefined, 
     posts: [...settled(postsResult, [])].sort((a, b) => b.scheduledFor.localeCompare(a.scheduledFor)).slice(0, shown),
     runs: [...settled(runsResult, [])].reverse().slice(0, shown),
   };
+}
+
+// The authorization as one line for the dashboard, with how urgently it needs a reconnect.
+export function tokenSummary(token: TokenStatus): { tone: "ok" | "warn" | "bad"; text: string } {
+  if (token.state === "missing") return { tone: "bad", text: "LinkedIn is not connected." };
+  if (token.state === "expired") return { tone: "bad", text: `LinkedIn authorization expired ${Math.abs(token.daysRemaining)} days ago.` };
+  if (token.daysRemaining <= reconnectWarningDays) return { tone: "warn", text: `LinkedIn authorization expires in ${token.daysRemaining} days.` };
+  return { tone: "ok", text: `LinkedIn authorization valid for ${token.daysRemaining} more days.` };
 }

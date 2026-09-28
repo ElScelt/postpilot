@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { handlePublish, type PublishDeps } from "../src/app/api/cron/publish/handler";
 import { cancelPost, listPosts, PostNotQueuedError, transitionPost, type QueuedPost } from "../src/lib/storage/posts";
-import { publishTextPost } from "../src/lib/linkedin/api";
+import { publishTextPost } from "../src/lib/linkedin/publish";
 import { publishTimeLimitSeconds } from "../src/lib/limits";
 import type { OperatorAlert } from "../src/lib/notify/ntfy";
 import { memoryPostStore } from "./fakes";

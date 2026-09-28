@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { loadDashboard, type DashboardDeps } from "../src/app/dashboard/data";
-import { tokenSummary } from "../src/lib/linkedin/api";
+import { loadDashboard, tokenSummary, type DashboardDeps } from "../src/app/dashboard/data";
 import { requiredVariables } from "../src/lib/env";
 import type { QueuedPost } from "../src/lib/storage/posts";
 import type { AutomationRun } from "../src/lib/storage/runs";

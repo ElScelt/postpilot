@@ -1,12 +1,11 @@
 import { headers } from "next/headers";
 import { config } from "@/lib/config";
 import { nextScheduledRun } from "@/lib/scheduling/schedules";
-import { tokenSummary } from "@/lib/linkedin/api";
 import { formatDateTime, formatDay } from "@/lib/scheduling/time";
 import { errorMessage } from "@/lib/errors";
 import { ActionButton } from "./forms";
 import { runNow } from "./actions";
-import { loadDashboard } from "./data";
+import { loadDashboard, tokenSummary } from "./data";
 import { PostCard, RunCard, SetupCard } from "./cards";
 import { levelColor, styles } from "./styles";
 

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { escapeCommentary, LinkedInPublishError, linkedInApiVersions, linkedInTokenStatus, publishTextPost, requireToken } from "../src/lib/linkedin/api";
+import { escapeCommentary, LinkedInPublishError, linkedInApiVersions, publishTextPost } from "../src/lib/linkedin/publish";
+import { linkedInTokenStatus, requireToken } from "../src/lib/linkedin/token";
 
 const day = 86_400_000;
 const now = Date.parse("2026-07-29T00:00:00Z");

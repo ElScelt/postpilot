@@ -1,7 +1,7 @@
 import type { z } from "zod";
 import { postSchema } from "../src/lib/storage/posts";
 import { runSchema } from "../src/lib/storage/runs";
-import { tokenSchema } from "../src/lib/linkedin/api";
+import { tokenSchema } from "../src/lib/linkedin/token";
 
 // What a deployment holds in Redis, as the app reads it: the queue as its raw JSON
 // string, the runs and the token as the deserialising client returns them.

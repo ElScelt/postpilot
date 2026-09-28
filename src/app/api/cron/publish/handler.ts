@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { listPosts, PostNotQueuedError, staleClaimMs, transitionPost } from "@/lib/storage/posts";
-import { LinkedInPublishError, publishTextPost } from "@/lib/linkedin/api";
+import { LinkedInPublishError, publishTextPost } from "@/lib/linkedin/publish";
 import { connectUrl } from "@/lib/linkedin/oauth";
 import { notifyOperator } from "@/lib/notify/ntfy";
 import { authorizeQStashRequest, verifyQStashSignature } from "@/lib/security/request-auth";

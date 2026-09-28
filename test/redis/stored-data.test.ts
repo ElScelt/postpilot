@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { versionedStore } from "../../src/lib/storage/redis";
 import { listPosts } from "../../src/lib/storage/posts";
 import { listAutomationRuns, recordAutomationRun } from "../../src/lib/storage/runs";
-import { loadLinkedInToken, saveLinkedInToken } from "../../src/lib/linkedin/api";
+import { loadLinkedInToken, saveLinkedInToken } from "../../src/lib/linkedin/token";
 import { checkStoredData } from "../../scripts/stored-data";
 import { testRedis } from "./client";
 

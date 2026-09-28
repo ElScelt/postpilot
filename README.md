@@ -221,7 +221,7 @@ The validator enforces these rules instead of trusting the prompt to follow them
   Check each provider's current limits.
 - **Vercel Hobby is for non-commercial use.** If your posts promote paid work, use Vercel Pro or another host.
 - **One author per deployment.** The Redis keys and QStash schedule are global to the deployment.
-- **LinkedIn API versions sunset.** Calls try each entry of `linkedInApiVersions` in [src/lib/linkedin/api.ts](src/lib/linkedin/api.ts) in turn, and move on when a version answers 426. Add the newest version at the front every few months.
+- **LinkedIn API versions sunset.** Calls try each entry of `linkedInApiVersions` in [src/lib/linkedin/publish.ts](src/lib/linkedin/publish.ts) in turn, and move on when a version answers 426. Add the newest version at the front every few months.
 
 ### Storage keys
 

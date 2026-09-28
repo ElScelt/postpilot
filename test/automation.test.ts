@@ -5,7 +5,7 @@ import type { AutomationRun } from "../src/lib/storage/runs";
 import { DraftRejectedError, draftingBudgetMs, type DraftOutcome } from "../src/lib/drafting/pipeline";
 import { runTimeLimitSeconds } from "../src/lib/limits";
 import type { RecentActivity } from "../src/lib/drafting/prompt";
-import type { TokenStatus } from "../src/lib/linkedin/api";
+import type { TokenStatus } from "../src/lib/linkedin/token";
 import type { QueuedPost } from "../src/lib/storage/posts";
 
 process.env.APP_URL = "https://example.vercel.app";
