@@ -162,18 +162,37 @@ test("retries a temporary Groq rate limit using Retry-After", async () => {
   assert.deepEqual(waits, [8508]);
 });
 
-test("returns the final response after two rate-limit retries", async () => {
+test("returns the final response after three rate-limit retries", async () => {
   let requests = 0;
+  const waits: number[] = [];
   const response = await requestGroq(
     {},
     async () => {
       requests += 1;
       return new Response("rate limited", { status: 429 });
     },
-    async () => undefined,
+    async (milliseconds: number) => { waits.push(milliseconds); },
   );
   assert.equal(response.status, 429);
-  assert.equal(requests, 3);
+  assert.equal(requests, 4);
+  assert.deepEqual(waits, [10_000, 20_000, 40_000]);
+});
+
+test("a short Retry-After that keeps failing waits longer each time, about a minute in all", async () => {
+  let requests = 0;
+  const waits: number[] = [];
+  const response = await requestGroq(
+    {},
+    async () => {
+      requests += 1;
+      return requests < 4
+        ? new Response("tokens per minute", { status: 429, headers: { "Retry-After": "1.4325" } })
+        : new Response("ok");
+    },
+    async (milliseconds: number) => { waits.push(milliseconds); },
+  );
+  assert.equal(response.status, 200);
+  assert.deepEqual(waits, [1432.5, 20_000, 40_000]);
 });
 
 test("does not wait for a daily rate limit to reset", async () => {

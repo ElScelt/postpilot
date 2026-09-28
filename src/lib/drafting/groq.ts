@@ -54,6 +54,12 @@ const responseSchema = z.object({
 // only delays the same failure, so the run reports it instead.
 const maxRetryWaitMs = 60_000;
 
+// Retry-After for the per-minute token limit is only a lower bound. On a live run the
+// review, sent right after the draft had used half the minute's budget, was
+// refused again after waiting the suggested 1.4 seconds twice. Later retries therefore
+// wait longer, about a minute in all, by when the draft's tokens have left the window.
+const minimumRetryWaitsMs = [0, 20_000, 40_000];
+
 // Strict JSON mode validates the answer server-side and answers 400 json_validate_failed
 // when it does not fit the schema. An empty failed_generation means the model emitted no
 // answer at all, which is what reasoning spending the whole completion budget looks like.
@@ -87,7 +93,7 @@ export async function requestGroq(
   wait: (milliseconds: number) => Promise<void> = sleep,
 ) {
   let response = await fetcher(groqEndpoint, init);
-  for (let retry = 0; response.status === 429 && retry < 2; retry += 1) {
+  for (let retry = 0; response.status === 429 && retry < minimumRetryWaitsMs.length; retry += 1) {
     const retryAfter = retryAfterSeconds(response);
     if (retryAfter !== undefined && retryAfter * 1000 > maxRetryWaitMs) {
       throw new GroqRateLimitError(
@@ -95,7 +101,8 @@ export async function requestGroq(
         retryAfter,
       );
     }
-    await wait(retryAfter !== undefined && retryAfter > 0 ? Math.min(retryAfter * 1000, 30_000) : 10_000);
+    const suggested = retryAfter !== undefined && retryAfter > 0 ? Math.min(retryAfter * 1000, 30_000) : 10_000;
+    await wait(Math.max(suggested, minimumRetryWaitsMs[retry]!));
     response = await fetcher(groqEndpoint, init);
   }
   return response;
