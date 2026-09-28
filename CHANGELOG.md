@@ -37,4 +37,5 @@ First public release.
   - a strict-JSON answer that nests its paragraphs is unwrapped instead of discarded, and any other malformed answer gets a correction naming what was wrong;
   - the review pass drops a cited source that reports a different story, and declines the post when the remaining sources cannot clear the evidence bar;
   - account, sign-in and status portals under a vendor domain (such as `myaccount.microsoft.com`) never count as sources.
+- The test suite runs on the default configuration, so a customised `postpilot.config.ts` no longer fails tests that expect UTC or an empty stack; one test still validates the file itself.
 - Redis credentials are read from `KV_REST_API_URL` and `KV_REST_API_TOKEN`, the names the Vercel marketplace integration adds, as well as from `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`.

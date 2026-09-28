@@ -32,8 +32,8 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test \"test/*.test.ts\"",
-    "test:coverage": "tsx --test --experimental-test-coverage --test-coverage-exclude=\"test/**\" \"test/*.test.ts\"",
+    "test": "tsx --import ./test/setup.ts --test \"test/*.test.ts\"",
+    "test:coverage": "tsx --import ./test/setup.ts --test --experimental-test-coverage --test-coverage-exclude=\"test/**\" \"test/*.test.ts\"",
     "draft": "node --env-file-if-exists=.env.local --import tsx scripts/draft.ts"
   },
   "overrides": {

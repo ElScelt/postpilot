@@ -1,9 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { config, loadConfig } from "../src/lib/config";
+import { loadConfig, userConfigFile } from "../src/lib/config";
 
-test("the shipped postpilot.config.ts is valid", () => {
-  assert.doesNotThrow(() => config());
+// The rest of the suite runs on the defaults (test/setup.ts); this is the check that
+// your own postpilot.config.ts is valid.
+test("postpilot.config.ts is valid", () => {
+  assert.doesNotThrow(() => loadConfig(userConfigFile()));
 });
 
 test("an empty configuration falls back to every default", () => {
