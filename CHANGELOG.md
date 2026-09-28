@@ -7,6 +7,7 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Changed
 
 - CI fails when test coverage drops below a floor, and the dashboard proxy, the LinkedIn connect and callback routes and every route file's exports have tests.
+- The test suite pins the default configuration through a function instead of the `POSTPILOT_CONFIG` environment variable, which a deployment could have set by accident.
 - CI also runs `npm run build`, and its actions are pinned to commit SHAs.
 
 ### Fixed

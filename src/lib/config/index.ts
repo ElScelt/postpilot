@@ -64,11 +64,16 @@ export function loadConfig(input: unknown): Config {
 
 let loaded: Config | undefined;
 
-// The test suite sets POSTPILOT_CONFIG=defaults (test/setup.ts) so its expectations hold
-// whatever the owner put in postpilot.config.ts.
 export function config(): Config {
-  loaded ??= loadConfig(process.env.POSTPILOT_CONFIG === "defaults" ? {} : userConfig);
+  loaded ??= loadConfig(userConfig);
   return loaded;
+}
+
+// The test suite runs on the defaults (test/setup.ts), so its expectations hold whatever
+// the owner put in postpilot.config.ts. A function rather than an environment variable,
+// so no deployment can switch to the defaults by accident.
+export function setConfigForTests(input: unknown) {
+  loaded = loadConfig(input);
 }
 
 export function userConfigFile(): unknown {
