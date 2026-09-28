@@ -37,6 +37,10 @@ export class DraftRejectedError extends Error {
 }
 
 export type DraftOptions = {
+  now?: Date;
+  // Every Tavily and Groq request goes through this; tests and the offline draft pass
+  // canned answers.
+  fetcher?: typeof fetch;
   // Wall-clock limit for the whole night, as an epoch millisecond. The Groq free tier
   // admits about one request of this size a minute, so every extra theme costs up to a
   // minute, and the run must never reach the function's own timeout.
@@ -70,14 +74,10 @@ function withDeadline(fetcher: typeof fetch, deadline: number): typeof fetch {
 // given up. The first production night stopped after one theme because the model
 // declined a set of DOM documentation returned for a backend query, and five themes
 // with real news went untried.
-export async function generateGroundedDraft(
-  recent: RecentActivity,
-  now = new Date(),
-  fetcher: typeof fetch = fetch,
-  options: DraftOptions = {},
-): Promise<DraftOutcome> {
+export async function generateGroundedDraft(recent: RecentActivity, options: DraftOptions = {}): Promise<DraftOutcome> {
+  const now = options.now ?? new Date();
   const deadline = options.deadline ?? Date.now() + draftingBudgetMs;
-  const bounded = withDeadline(fetcher, deadline);
+  const bounded = withDeadline(options.fetcher ?? fetch, deadline);
   const maxThemes = options.maxThemesDrafted ?? defaultMaxThemesDrafted;
   const themesTried: PostTheme[] = [];
   const evidenceHosts: Record<string, string[]> = {};

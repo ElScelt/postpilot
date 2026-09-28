@@ -9,7 +9,7 @@ test("the offline draft clears the validator and review on every default theme",
   const now = new Date("2026-09-06T18:00:00.000Z");
   for (const theme of themeIds()) {
     const recent = { posts: [], topics: [], sourceUrls: [], themes: themeIds().filter((other) => other !== theme) };
-    const outcome = await generateGroundedDraft(recent, now, createOfflineFetch(now));
+    const outcome = await generateGroundedDraft(recent, { now, fetcher: createOfflineFetch(now) });
     assert.equal(outcome.theme, theme);
     assert.equal(outcome.decision.shouldPost, true, theme);
     assert.deepEqual(outcome.attempts, [], theme);

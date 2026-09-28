@@ -28,6 +28,9 @@ export function scheduleRequest(destination = automationUrl(), settings: Schedul
 }
 
 export type ReconcileOptions = {
+  client?: ReturnType<typeof qstash>;
+  // Where the schedule delivers; the deployment's own run route unless a test says otherwise.
+  destination?: string;
   // A run triggered by hand from wherever the secret was pasted. Such a run may create
   // a missing schedule but must never repoint a live one at its own host: a local dev
   // server holding the production QStash token once sent every firing to localhost.
@@ -39,12 +42,9 @@ export type ReconcileOptions = {
 // live schedule in line with the configuration itself: a schedule change ships with the
 // deploy and takes effect on the next run, no hand-run setup call required. Creating
 // with an existing scheduleId overwrites in place, so a live schedule is never deleted.
-export async function reconcileAutomationSchedules(
-  client = qstash(),
-  destination = automationUrl(),
-  options: ReconcileOptions = {},
-) {
-  const request = scheduleRequest(destination, options.settings);
+export async function reconcileAutomationSchedules(options: ReconcileOptions = {}) {
+  const client = options.client ?? qstash();
+  const request = scheduleRequest(options.destination ?? automationUrl(), options.settings);
   const live = await getIfPresent(client, runScheduleId);
   if (live && sameCron(live.cron, request.cron) && live.destination === request.destination) return [];
   if (live && options.manual && hostOf(live.destination) !== hostOf(request.destination)) {

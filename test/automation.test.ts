@@ -192,7 +192,7 @@ test("a run killed while holding the lock does not block QStash's first retry", 
 test("drafting ends in time for the run to queue the post before the route's limit", async () => {
   const { deps } = fakes();
   let deadline: number | undefined;
-  deps.generateGroundedDraft = async (_recent, _now, _fetcher, options) => {
+  deps.generateGroundedDraft = async (_recent, options) => {
     deadline = options?.deadline;
     return scheduledOutcome;
   };

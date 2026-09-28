@@ -148,7 +148,7 @@ async function retireStuckPosts({ now, deps, warnings }: Run, posts: QueuedPost[
 // must never cost tonight's post; it only surfaces as a warning on the run record.
 async function reconcileSchedule({ deps, options, warnings }: Run) {
   try {
-    for (const change of await deps.reconcileAutomationSchedules(undefined, undefined, { manual: options.manual })) {
+    for (const change of await deps.reconcileAutomationSchedules({ manual: options.manual })) {
       warnings.push(`Schedule reconciled (${change}).`);
     }
   } catch (error) {
@@ -211,7 +211,7 @@ async function draftAndQueue(run: Run, posts: QueuedPost[]) {
   try {
     // The budget runs from the start of the run, not from here: the sweep, the schedule
     // and the token checks have already spent some of the route's time.
-    outcome = await deps.generateGroundedDraft(recentActivity(posts, now), now, undefined, { deadline: now.getTime() + draftingBudgetMs });
+    outcome = await deps.generateGroundedDraft(recentActivity(posts, now), { now, deadline: now.getTime() + draftingBudgetMs });
   } catch (error) {
     if (!(error instanceof DraftRejectedError)) throw error;
     // Recorded here so the rejected drafts survive; the route still answers 500 so

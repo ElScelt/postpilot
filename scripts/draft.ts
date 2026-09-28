@@ -31,7 +31,7 @@ async function main() {
   }
 
   try {
-    const outcome = await generateGroundedDraft(recent, now, offline ? createOfflineFetch(now) : fetch);
+    const outcome = await generateGroundedDraft(recent, { now, fetcher: offline ? createOfflineFetch(now) : fetch });
     console.log(JSON.stringify({
       theme: outcome.theme,
       themesTried: outcome.themesTried,

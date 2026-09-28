@@ -62,7 +62,7 @@ test("reconcile rewrites a live schedule whose cron drifted from the code", asyn
   const { client, created } = fakeClient({
     "postpilot-run": { cron: "CRON_TZ=Europe/Tallinn 0 21 * * 0-4", destination },
   });
-  const changed = await reconcileAutomationSchedules(client, destination, { settings: tallinn });
+  const changed = await reconcileAutomationSchedules({ client, destination, settings: tallinn });
   assert.deepEqual(created.map((request) => request.cron), ["CRON_TZ=Europe/Tallinn 0 21 * * 0,2,4"]);
   assert.match(changed[0]!, /0 21 \* \* 0-4 at https:\/\/example\.com.* -> CRON_TZ=Europe\/Tallinn 0 21 \* \* 0,2,4/);
 });
@@ -71,7 +71,7 @@ test("reconcile leaves a matching schedule untouched", async () => {
   const { client, created } = fakeClient({
     "postpilot-run": { cron: "CRON_TZ=Europe/Tallinn 0 21 * * 0,2,4", destination },
   });
-  assert.deepEqual(await reconcileAutomationSchedules(client, destination, { settings: tallinn }), []);
+  assert.deepEqual(await reconcileAutomationSchedules({ client, destination, settings: tallinn }), []);
   assert.deepEqual(created, []);
 });
 
@@ -79,13 +79,13 @@ test("reconcile ignores whitespace QStash may have normalised away", async () =>
   const { client, created } = fakeClient({
     "postpilot-run": { cron: "CRON_TZ=Europe/Tallinn  0 21 * * 0,2,4 ", destination },
   });
-  assert.deepEqual(await reconcileAutomationSchedules(client, destination, { settings: tallinn }), []);
+  assert.deepEqual(await reconcileAutomationSchedules({ client, destination, settings: tallinn }), []);
   assert.deepEqual(created, []);
 });
 
 test("reconcile creates the schedule when none exists", async () => {
   const { client, created } = fakeClient({});
-  const changed = await reconcileAutomationSchedules(client, destination, { settings: tallinn });
+  const changed = await reconcileAutomationSchedules({ client, destination, settings: tallinn });
   assert.equal(created.length, 1);
   assert.match(changed[0]!, /created CRON_TZ=Europe\/Tallinn 0 21 \* \* 0,2,4/);
 });
@@ -94,7 +94,7 @@ test("reconcile rewrites a schedule pointing at a stale destination", async () =
   const { client, created } = fakeClient({
     "postpilot-run": { cron: "CRON_TZ=Europe/Tallinn 0 21 * * 0,2,4", destination: "https://old.example.com/api/automation/run" },
   });
-  await reconcileAutomationSchedules(client, destination, { settings: tallinn });
+  await reconcileAutomationSchedules({ client, destination, settings: tallinn });
   assert.equal(created.length, 1);
 });
 
@@ -102,14 +102,14 @@ test("a manual run never repoints a live schedule at its own host", async () => 
   const { client, created } = fakeClient({
     "postpilot-run": { cron: "CRON_TZ=Europe/Tallinn 0 21 * * 0,2,4", destination },
   });
-  const changed = await reconcileAutomationSchedules(client, "http://localhost:3000/api/automation/run", { manual: true, settings: tallinn });
+  const changed = await reconcileAutomationSchedules({ client, destination: "http://localhost:3000/api/automation/run", manual: true, settings: tallinn });
   assert.deepEqual(created, []);
   assert.match(changed[0]!, /left alone by a manual run/);
 });
 
 test("a manual run still creates a missing schedule", async () => {
   const { client, created } = fakeClient({});
-  await reconcileAutomationSchedules(client, destination, { manual: true, settings: tallinn });
+  await reconcileAutomationSchedules({ client, destination, manual: true, settings: tallinn });
   assert.equal(created.length, 1);
 });
 
