@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
-import { cancelPost, listPosts, notQueuedReason, PostNotQueuedError, type QueuedPost } from "@/lib/storage/posts";
+import { cancelPost, listPosts, PostNotQueuedError, type QueuedPost } from "@/lib/storage/posts";
+import { notQueuedReason } from "@/lib/post-refusal";
 import { errorMessage } from "@/lib/errors";
 import { formatDateTime } from "@/lib/scheduling/time";
 import { buttonStyle, escapeHtml, invalidLinkPage, page, rejectTarget } from "./html";

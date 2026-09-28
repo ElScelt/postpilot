@@ -9,7 +9,6 @@ import type { TokenStatus } from "../src/lib/linkedin/token";
 import type { QueuedPost } from "../src/lib/storage/posts";
 
 process.env.APP_URL = "https://example.vercel.app";
-process.env.NTFY_TOPIC = "secret-topic";
 
 // Sunday 18:00 UTC; with the default configuration the post targets Monday 09:00 UTC.
 const now = new Date("2026-09-06T18:00:00.000Z");
@@ -44,6 +43,8 @@ type Options = {
   locked?: boolean;
   // The notice cannot reach ntfy.
   noticeFails?: boolean;
+  // NTFY_TOPIC is unset.
+  noTopic?: boolean;
 };
 
 function fakes(options: Options = {}) {
@@ -78,6 +79,7 @@ function fakes(options: Options = {}) {
     recordAutomationRun: async (run) => { calls.runs.push(run); return run; },
     acquireRunLock: async () => (options.locked ? undefined : "token"),
     releaseRunLock: async () => { calls.released = true; },
+    ntfyTopic: options.noTopic ? undefined : "secret-topic",
   };
   return { deps, calls };
 }
@@ -288,20 +290,16 @@ test("a retry that finds tonight's post stored but never scheduled schedules and
   assert.match(calls.runs[0]!.warning!, /stored but did not schedule/);
 });
 
-test("a missing notification topic is a warning, never a lost post", async (t) => {
-  delete process.env.NTFY_TOPIC;
-  t.after(() => { process.env.NTFY_TOPIC = "secret-topic"; });
-  const { deps, calls } = fakes();
+test("a missing notification topic is a warning, never a lost post", async () => {
+  const { deps, calls } = fakes({ noTopic: true });
   const result = await runAutomation(now, deps);
   assert.equal(result.status, "scheduled");
   assert.equal(calls.notified, 0);
   assert.match(calls.runs[0]!.warning!, /NTFY_TOPIC is unset/);
 });
 
-test("without a notification topic a scheduled post counts as finished", async (t) => {
-  delete process.env.NTFY_TOPIC;
-  t.after(() => { process.env.NTFY_TOPIC = "secret-topic"; });
-  const { deps, calls } = fakes({ posts: [post({ id: "queued", status: "queued", scheduledFor: "2026-09-07T09:00:00.000Z", qstashMessageId: "msg" })] });
+test("without a notification topic a scheduled post counts as finished", async () => {
+  const { deps, calls } = fakes({ noTopic: true, posts: [post({ id: "queued", status: "queued", scheduledFor: "2026-09-07T09:00:00.000Z", qstashMessageId: "msg" })] });
   assert.equal((await runAutomation(now, deps)).status, "skipped");
   assert.equal(calls.notified, 0);
 });

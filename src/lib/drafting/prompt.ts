@@ -1,5 +1,6 @@
 import { config, type Config } from "../config";
-import { bannedQuestionOpener, freshnessWords, firstParagraph, lastParagraph, openingWords, wordTarget } from "./rules";
+import { bannedQuestionOpener, freshnessWords, wordTarget } from "./rules";
+import { firstParagraph, lastParagraph, openingWords } from "./text";
 import { experienceVerbs } from "./claims";
 import { groqRequest } from "./groq";
 import { sourceTier, type EvidenceSettings } from "../research/sources";

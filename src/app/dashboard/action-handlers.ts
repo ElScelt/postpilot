@@ -1,4 +1,5 @@
-import { cancelPost, editPostText, notQueuedReason, PostNotQueuedError, type PostStoreDeps } from "@/lib/storage/posts";
+import { cancelPost, editPostText, PostNotQueuedError, type PostStoreDeps } from "@/lib/storage/posts";
+import { notQueuedReason } from "@/lib/post-refusal";
 import { automationUrl, manualRunLabel, qstash, qstashTimeoutMs } from "@/lib/scheduling/qstash";
 import { withTimeout } from "@/lib/async";
 import { runRetries } from "@/lib/limits";

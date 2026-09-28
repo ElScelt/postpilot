@@ -3,6 +3,7 @@ import { meetsEvidenceBar } from "../research/sources";
 import { recentDays } from "../scheduling/time";
 import { maxPostLength } from "../limits";
 import { experienceClaim, inventedHistory } from "./claims";
+import { firstParagraph, lastParagraph, openingWords } from "./text";
 import { spelledNumbers, unsupportedNumbers } from "./numbers";
 import type { Draft, DraftContext, DraftSettings, ResearchSource } from "./types";
 
@@ -226,19 +227,6 @@ function unterminatedParagraphs(text: string) {
 
 function lastWords(text: string, count: number) {
   return text.split(/\s+/).slice(-count).join(" ");
-}
-
-export function firstParagraph(text: string) {
-  return text.trim().split(/\n{2,}/)[0]?.trim() ?? "";
-}
-
-export function lastParagraph(text: string) {
-  return text.trim().split(/\n{2,}/).at(-1)?.trim() ?? "";
-}
-
-export function openingWords(text: string, count: number) {
-  return text.toLowerCase().replace(/[’‘`]/g, "'").replace(/[^a-z0-9'\s]/g, " ")
-    .trim().split(/\s+/).slice(0, count).join(" ");
 }
 
 // Judged by calendar day, so a source from the first day of the window is not rejected
