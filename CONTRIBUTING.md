@@ -42,6 +42,8 @@ docker run -d --network postpilot-test -p 8079:80 -e SRH_MODE=env -e SRH_TOKEN=p
 
 ## Pull requests
 
+Every change reaches `main` through a pull request, and `check` and `redis` must pass before it merges. Pull requests are squash-merged, so the title becomes the commit message. Write it as a [Conventional Commit](https://www.conventionalcommits.org/): a type, an optional scope, and a short lowercase summary, such as `fix(publish): never retry an unknown outcome` or `docs: explain the evidence bar`.
+
 - Keep each pull request to one change, and explain in the description why it is needed.
 - Add or update tests for any behaviour you change. Tests use `node:test` and fake every external service through injected parameters; they must never touch the network.
 - Match the surrounding code: small modules, no new dependencies or abstractions unless they remove real duplication, and comments that explain *why*.
