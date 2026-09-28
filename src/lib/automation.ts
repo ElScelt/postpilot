@@ -1,6 +1,6 @@
 import { DraftRejectedError, draftingBudgetMs, generateGroundedDraft } from "./drafting/pipeline";
 import { scheduledPostTime } from "./scheduling/schedules";
-import { abandonedPosts, isLive, listPosts, PostNotQueuedError, schedulePost, transitionPost, type QueuedPost } from "./storage/posts";
+import { abandonedPosts, isLive, listPosts, PostStateError, schedulePost, transitionPost, type QueuedPost } from "./storage/posts";
 import { recordAutomationRun } from "./storage/runs";
 import { reconcileAutomationSchedules } from "./scheduling/schedules";
 import { linkedInTokenStatus } from "./linkedin/api";
@@ -84,22 +84,32 @@ export async function runAutomation(
 
     // Sweep first: a post still queued hours after its slot never reached LinkedIn.
     // Retiring it must happen even when the run cannot proceed, because a dead
-    // authorization is precisely what leaves posts stranded in the queue.
+    // authorization is precisely what leaves posts stranded in the queue. A post a killed
+    // delivery left publishing may be on LinkedIn, so it is retired without a retry.
     for (const abandoned of abandonedPosts(posts, now)) {
-      abandoned.error ??= "Post was never published before its scheduled time elapsed.";
+      const midPublish = abandoned.status === "publishing";
+      const error = midPublish
+        ? "A delivery stopped while publishing the post; it may be live. It will not be retried."
+        : abandoned.error ?? "Post was never published before its scheduled time elapsed.";
       try {
-        await deps.transitionPost(abandoned.id, ["queued"], { status: "failed", error: abandoned.error });
-      } catch (error) {
+        await deps.transitionPost(abandoned.id, [abandoned.status], { status: "failed", error });
+      } catch (refusal) {
         // Published or rejected since the list was read: nothing is stranded after all.
-        if (error instanceof PostNotQueuedError) continue;
-        throw error;
+        if (refusal instanceof PostStateError) continue;
+        throw refusal;
       }
-      warnings.push(`Earlier post ${abandoned.id} never published: ${abandoned.error}`);
-      await deps.notifyOperator({
-        title: "A LinkedIn post never went out",
-        body: `The post scheduled for ${formatDateTime(abandoned.scheduledFor)} was retired: ${abandoned.error} Check LinkedIn before posting it by hand.`,
-        priority: 4,
-      });
+      warnings.push(`Earlier post ${abandoned.id} ${midPublish ? "may not have published" : "never published"}: ${error}`);
+      await deps.notifyOperator(midPublish
+        ? {
+          title: "A LinkedIn post may or may not have gone out",
+          body: `The post scheduled for ${formatDateTime(abandoned.scheduledFor)} was retired: ${error} Look for it on LinkedIn and post it by hand only if it is not there.`,
+          priority: 5,
+        }
+        : {
+          title: "A LinkedIn post never went out",
+          body: `The post scheduled for ${formatDateTime(abandoned.scheduledFor)} was retired: ${error} Check LinkedIn before posting it by hand.`,
+          priority: 4,
+        });
     }
 
     // The live QStash schedule follows the code, not the other way round. A failure here

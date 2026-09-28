@@ -65,13 +65,14 @@ export async function listPosts(deps: PostStoreDeps = {}): Promise<QueuedPost[]>
 // QStash gives up on a delivery within about ninety minutes (four attempts bounded by
 // the free plan's fifteen-minute timeout, plus half an hour of backoff), so a post still
 // queued long after its slot was never delivered. Anything short of that window may
-// still be in flight.
+// still be in flight. A post left publishing by a delivery that was killed is stuck
+// once no delivery can still be running; whether LinkedIn has it is unknown.
 const abandonedAfterMs = 6 * 60 * 60 * 1000;
 
 export function abandonedPosts(posts: QueuedPost[], now: Date) {
   return posts.filter((post) =>
-    post.status === "queued"
-    && Date.parse(post.scheduledFor) < now.getTime() - abandonedAfterMs,
+    (post.status === "queued" && Date.parse(post.scheduledFor) < now.getTime() - abandonedAfterMs)
+    || (post.status === "publishing" && Date.parse(post.claimedAt ?? post.scheduledFor) < now.getTime() - staleClaimMs),
   );
 }
 
@@ -142,12 +143,22 @@ export async function schedulePost(text: string, scheduledFor: string, automatio
   }
 }
 
-// The one refusal that means "nothing to do": the post exists in another state, or the
-// history no longer holds it. Every other error, a Redis outage above all, must reach
-// the owner as a failure, because a Reject that only looks done lets the post go out.
-export class PostNotQueuedError extends Error {
-  constructor(readonly id: string, readonly status?: QueuedPost["status"]) {
-    super("No queued post exists with that id.");
+// A change refused because the post has moved on from the states it applies to, usually
+// because another request changed it first, or because the history no longer holds it.
+// These are the refusals that mean "nothing to do". Every other error, a Redis outage
+// above all, must reach the owner as a failure: a Reject that only looks done lets the
+// post go out.
+export class PostStateError extends Error {
+  constructor(readonly id: string, readonly status: QueuedPost["status"] | undefined, message: string) {
+    super(message);
+    this.name = "PostStateError";
+  }
+}
+
+// The refusal of a change that needs a queued post: a Reject, an edit, a claim.
+export class PostNotQueuedError extends PostStateError {
+  constructor(id: string, status?: QueuedPost["status"]) {
+    super(id, status, "No queued post exists with that id.");
     this.name = "PostNotQueuedError";
   }
 }
@@ -172,7 +183,7 @@ export async function transitionPost(
     const post = posts.find((item) => item.id === id);
     if (!post || !from.includes(post.status)) {
       if (from.includes("queued")) throw new PostNotQueuedError(id, post?.status);
-      throw new Error(`Post ${id} is ${post?.status ?? "no longer stored"}, not ${from.join(" or ")}.`);
+      throw new PostStateError(id, post?.status, `Post ${id} is ${post?.status ?? "no longer stored"}, not ${from.join(" or ")}.`);
     }
     return Object.assign(post, patch);
   }, deps);

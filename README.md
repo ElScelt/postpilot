@@ -263,6 +263,7 @@ On the dashboard's run history: every rejected draft is listed next to the rule 
 | "LinkedIn publish failed" | The publish request was rejected. | Reconnect if the message mentions authorization. A 426 on every version means `linkedInApiVersions` needs a newer entry. |
 | "A LinkedIn post never went out" | Every delivery attempt failed and the sweep retired the post. | Check LinkedIn before posting the text by hand. |
 | "Check LinkedIn: a post may have gone out" | LinkedIn timed out or failed mid-publish, so postpilot cannot tell whether the post is live. It is never retried, to avoid posting twice. | Look for the post on LinkedIn; post it by hand only if it is missing. |
+| "A LinkedIn post may or may not have gone out" | A publish was cut off mid-call and no later delivery settled it, so the evening run retired it. | Look for the post on LinkedIn; post it by hand only if it is missing. |
 | "LinkedIn published the post, but its record was not updated" | LinkedIn has the post, but Redis could not record it. | Nothing: the post went out. The alert names its LinkedIn id. |
 | "Reject failed, try again" | Redis could not be reached, so the post is still queued. | Tap **Try again**. If it keeps failing, check Upstash's status and reject from the dashboard once it is back. |
 | The dashboard rejects the right password | The `AUTOMATION_SECRET` value was saved with a trailing `` or newline. | Set the variable again without it and redeploy. |

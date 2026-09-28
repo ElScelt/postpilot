@@ -10,6 +10,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Fixed
 
+- The evening sweep retires a post that a killed delivery left mid-publish, with an alert to check LinkedIn, instead of leaving it stuck. It is never retried.
 - The publish route claims a post before calling LinkedIn, so a Reject that arrives mid-publish says it is too late instead of reporting success and being overwritten. A LinkedIn call that times out or fails in a way that may have saved the post is never retried; you get an alert to check LinkedIn. Before, a hung LinkedIn call left the post queued and QStash's retry could post it twice.
 - When LinkedIn accepts a post but its record cannot be written, the write is retried once and the alert names the LinkedIn post id.
 - Every write to the post queue is a compare-and-set, so concurrent writers no longer undo each other: a dashboard edit, a Reject and the publish route used to be able to write back stale copies of the whole queue.

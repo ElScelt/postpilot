@@ -129,6 +129,21 @@ test("retires an abandoned post, alerts, and stops on an expired token", async (
   assert.match(calls.runs[0]!.warning!, /Earlier post stuck never published/);
 });
 
+test("a post stuck mid-publish is retired with a check-LinkedIn alert and never sent again", async () => {
+  const { deps, calls } = fakes({
+    posts: [post({ id: "stuck", status: "publishing", scheduledFor: "2026-09-06T06:00:00.000Z", claimedAt: "2026-09-06T06:00:05.000Z" })],
+  });
+  const froms: string[][] = [];
+  const record = deps.transitionPost;
+  deps.transitionPost = async (id, from, patch) => { froms.push(from); return record(id, from, patch); };
+  await runAutomation(now, deps);
+  assert.deepEqual(froms, [["publishing"]]);
+  assert.equal(calls.updates[0]!.status, "failed");
+  assert.match(calls.updates[0]!.error!, /may be live/);
+  assert.ok(calls.alerts.includes("A LinkedIn post may or may not have gone out"));
+  assert.ok(!calls.alerts.includes("A LinkedIn post never went out"));
+});
+
 test("queues the post but demands a reconnect when the token dies before the publish", async () => {
   const { deps, calls } = fakes({ token: { state: "valid", daysRemaining: 0 }, tokenAtPublish: { state: "expired", daysRemaining: 0 } });
   const result = await runAutomation(now, deps);

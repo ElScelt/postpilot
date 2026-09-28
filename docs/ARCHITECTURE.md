@@ -35,7 +35,7 @@ sequenceDiagram
 `runAutomation` is the orchestrator. Its dependencies are injected, so tests replace every service with a fake. In order, it:
 
 1. **Takes a lock** keyed by the publish date, so a manual run and a scheduled firing can't both queue a post for the same morning. The lock expires after the route's `maxDuration`, so a run the platform kills never blocks QStash's retries, and only the run holding its token can release it.
-2. **Sweeps** posts still queued hours after their slot, marks them failed and alerts you.
+2. **Sweeps** posts still queued hours after their slot, marks them failed and alerts you. A post a killed delivery left `publishing` may be on LinkedIn, so it is marked failed with an alert to check LinkedIn and is never retried.
 3. **Reconciles** the QStash schedule with the one computed from `postpilot.config.ts`. A failure here only adds a warning.
 4. **Checks the LinkedIn token.**
    - A missing or expired token stops the run with a high-priority alert.

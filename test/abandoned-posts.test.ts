@@ -34,3 +34,9 @@ test("ignores posts that already reached a terminal state", () => {
   ];
   assert.deepEqual(abandonedPosts(settled, now), []);
 });
+
+test("retires a post stuck mid-publish once no delivery can still be running", () => {
+  const stuck = post({ id: "stuck", status: "publishing", claimedAt: "2026-07-29T07:30:00.000Z" });
+  const running = post({ id: "running", status: "publishing", claimedAt: "2026-07-29T07:59:30.000Z" });
+  assert.deepEqual(abandonedPosts([stuck, running], now).map((p) => p.id), ["stuck"]);
+});
