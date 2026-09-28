@@ -1,5 +1,5 @@
 import { config, type Config } from "../config";
-import { experienceVerbs, freshnessWords, firstParagraph, lastParagraph, openingWords } from "./rules";
+import { experienceVerbs, freshnessWords, firstParagraph, lastParagraph, openingWords, wordTarget } from "./rules";
 import { groqRequest } from "./groq";
 import { sourceTier } from "../research/sources";
 import type { ResearchResult } from "../research/tavily";
@@ -132,7 +132,8 @@ export function hardRules({ limits, persona }: Pick<Config, "limits" | "persona"
     ? `Never open a paragraph with "For a", "In a" or "On a" followed by ${persona.stack.join(", ")}. `
     : "";
   const rules = [
-    `Write ${limits.minWords}-${limits.maxWords} words across the five paragraph fields; the question field is one genuine closing question ending in ?.`,
+    `Write ${limits.minWords}-${limits.maxWords} words across the five paragraph fields, aiming for about ${wordTarget(limits)}; a draft under ${limits.minWords} is discarded, so count before answering. The question field is one genuine closing question ending in ?.`,
+    'Write complete sentences with normal punctuation: every sentence in the context, insight and takeaway ends with a full stop (checklist lines may omit it), and compound words keep their usual form (trade-off, ad hoc, built-in, post-processing).',
     "Never use an em-dash or en-dash anywhere in the post; connect clauses with commas, parentheses, or words like and, so, because instead.",
     `Do not use vague time language such as ${freshnessWords.join(", ")}.`,
     `The hook must never claim you ran, tested, benchmarked, measured, used, stopped using, or switched anything: no "I" or "we" followed by ${experienceVerbs.join(", ")}, or by "been ...ing". State a decision, a position, or an observation instead.`,
@@ -143,6 +144,7 @@ export function hardRules({ limits, persona }: Pick<Config, "limits" | "persona"
     `Keep the hook under ${hookWords} words (about ${hookCharacters} characters); a phone shows only about 140 characters before "see more".`,
     "Plain text only. LinkedIn shows asterisks, backticks and markdown literally, so never use them; a checklist is one item per line with no bullet characters.",
     'Never invent history anywhere in the post: no "our codebase was on", "we migrated", "I ran", or any past usage, test or result the evidence does not state. State what you would do and what you would verify, in the present or the conditional.',
+    'Never describe your own codebase, product or team as fact, in any tense: no "our component library renders", "my team uses", "our app runs on". Write "if your app renders..." or "in an app that renders..." instead.',
     'Never mention the sources, the evidence or their dates in the post (no "both sources were published in late August", no "the evidence shows"); the reader sees the post, not the research. Attribute a claim to the vendor by name instead.',
   ];
   return `Hard rules. A validator checks every one of them and discards a draft that breaks any, so treat them as absolute:

@@ -46,7 +46,73 @@ export function parseDraftDecision(text: string, results: ResearchResult[]): Dra
   };
 }
 
-const trackingParams = /^(?:utm_\w+|ref|source|fbclid|gclid)$/i;
+const paragraphFields = ["hook", "context", "insight", "takeaway", "question"] as const;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// Strict mode on a live run twice answered with every paragraph field holding a copy of
+// the whole paragraph object ({"hook": {"hook": "...", "context": "", ...}}), and the
+// night was lost although the text was all there. Such an answer is unwrapped; the
+// result is judged by the validator like any other draft. A field whose object holds
+// several different texts is ambiguous and is not guessed at.
+export function repairDraftJson(text: string): string | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+  if (!isRecord(parsed) || !isRecord(parsed.paragraphs)) return undefined;
+  const paragraphs: Record<string, unknown> = { ...parsed.paragraphs };
+  let changed = false;
+  for (const field of paragraphFields) {
+    if (typeof paragraphs[field] === "string") continue;
+    const flattened = flattenParagraph(paragraphs[field], field);
+    if (flattened === undefined) return undefined;
+    paragraphs[field] = flattened;
+    changed = true;
+  }
+  if (!changed) return undefined;
+  const repaired = { ...parsed, paragraphs };
+  return responseSchema.safeParse(repaired).success ? JSON.stringify(repaired) : undefined;
+}
+
+function flattenParagraph(value: unknown, field: string) {
+  // A checklist sent as an array of lines.
+  if (Array.isArray(value)) {
+    return value.every((line) => typeof line === "string")
+      ? value.map((line: string) => line.trim()).filter(Boolean).join("\n")
+      : undefined;
+  }
+  if (!isRecord(value)) return undefined;
+  const own = value[field];
+  if (typeof own === "string" && own.trim()) return own;
+  const texts = [...new Set(Object.values(value)
+    .filter((entry): entry is string => typeof entry === "string" && entry.trim() !== ""))];
+  return texts.length === 1 ? texts[0] : undefined;
+}
+
+// The correction for an answer Groq refused as invalid JSON. "Empty or not valid JSON"
+// told the model nothing, and it repeated the same nested shape on its second attempt.
+export function draftJsonProblem(failedGeneration: string) {
+  if (!failedGeneration.trim()) {
+    return "The previous answer was empty, most likely because the reasoning used the whole budget. Keep the reasoning short and answer with the JSON object only.";
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(failedGeneration);
+  } catch {
+    return "The previous answer was not valid JSON (it was cut off or malformed). Answer with one complete JSON object only.";
+  }
+  const result = responseSchema.safeParse(parsed);
+  const issues = result.success ? [] : result.error.issues.slice(0, 4)
+    .map((issue) => `${issue.path.join(".") || "the answer"}: ${issue.message}`);
+  return `The previous answer did not match the required JSON shape${issues.length ? ` (${issues.join("; ")})` : ""}. Every paragraph field (hook, context, insight, takeaway, question) is one plain string, never an object or an array; write a checklist as one string with each item on its own line.`;
+}
+
+const trackingParams =/^(?:utm_\w+|ref|source|fbclid|gclid)$/i;
 
 // The model is told to copy URLs verbatim, but it drops tracking parameters, the scheme
 // or a leading www. often enough that an exact match failed whole nights. Two distinct

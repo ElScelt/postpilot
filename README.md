@@ -200,7 +200,8 @@ The validator enforces these rules instead of trusting the prompt to follow them
 - `minWords`–`maxWords` words, a hook of at most `maxHookLength` characters, and a specific closing question.
 - One dated first-party source, or two dated credible publishers, all reporting the same development and no older than `sourceWindowDays`. Documentation and reference pages carry no date, so they can only accompany a dated source.
 - No number of ten or more that the evidence does not state, and no such number spelled out in words.
-- No em-dashes, no freshness words ("just", "latest"), no invented personal history ("we migrated", "our codebase").
+- No em-dashes, no freshness words ("just", "latest"), no invented personal history ("we migrated", "our codebase"), and no claim about your own systems stated as fact ("our component library renders").
+- Complete sentences: every prose paragraph ends with a full stop, no two sentences run together, and no run-together compounds ("adhoc", "a trade off"). Checklist lines are exempt.
 - No links, e-mail addresses, markdown, citation placeholders or academic citations.
 - No paragraph that announces the stack, and no term from `persona.avoidTopics`.
 - A hook and closing question that don't start like a recent post's, and a theme that differs from the previous post's.

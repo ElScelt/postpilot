@@ -1,6 +1,6 @@
 import { draftViolations } from "./rules";
 import type { DraftContext } from "./types";
-import { parseDraftDecision, type DraftDecision } from "./decision";
+import { draftJsonProblem, parseDraftDecision, repairDraftJson, type DraftDecision } from "./decision";
 import { completeGroq, GroqInvalidJsonError } from "./groq";
 import { buildDraftRequest, type RecentActivity } from "./prompt";
 import { buildReviewRequest, type PostedDecision } from "./review";
@@ -123,27 +123,34 @@ async function draftFromTheme(
         buildDraftRequest({ recent, results: focused, now, theme, feedback, failedDraft, compact, reasoning }), "draft", fetcher,
       );
     } catch (error) {
-      // An empty or malformed answer in strict JSON mode is usually the reasoning
-      // spending the whole completion budget. The attempt is repeated once with low
-      // reasoning effort; a second failure is fed back like any other invalid draft.
-      if (error instanceof GroqInvalidJsonError) {
-        if (reasoning === "medium") {
+      const repaired = repairedAnswer(error);
+      if (repaired !== undefined) {
+        text = repaired;
+      } else if (error instanceof GroqInvalidJsonError) {
+        // An empty or cut-off answer in strict JSON mode is usually the reasoning
+        // spending the whole completion budget, so it is repeated once with low
+        // reasoning effort. Complete JSON in the wrong shape would not improve with less
+        // thinking; it, and a second failure of any kind, is fed back like an invalid draft.
+        if (reasoning === "medium" && !parsesAsJson(error.failedGeneration)) {
           reasoning = "low";
           attempt -= 1;
           continue;
         }
-        feedback = "The previous answer was empty or was not valid JSON for the required schema. Answer with the JSON object only.";
-        failedDraft = error.failedGeneration;
+        feedback = draftJsonProblem(error.failedGeneration);
+        // The malformed answer itself is not shown again: on a live run the model
+        // copied its nested shape straight back.
+        failedDraft = "";
         attempts.push({ text: error.failedGeneration, reason: feedback });
         continue;
+      } else {
+        // The free tier's per-minute token budget is shared by prompt and answer. When
+        // Groq refuses the request as too large, the same attempt is repeated once with
+        // fewer, shorter excerpts instead of losing the night.
+        if (compact || !(error instanceof Error) || !/too large/.test(error.message)) throw error;
+        compact = true;
+        attempt -= 1;
+        continue;
       }
-      // The free tier's per-minute token budget is shared by prompt and answer. When
-      // Groq refuses the request as too large, the same attempt is repeated once with
-      // fewer, shorter excerpts instead of losing the night.
-      if (compact || !(error instanceof Error) || !/too large/.test(error.message)) throw error;
-      compact = true;
-      attempt -= 1;
-      continue;
     }
     let decision: DraftDecision;
     try {
@@ -168,14 +175,37 @@ async function draftFromTheme(
   return { decision: { shouldPost: false, reason: feedback }, rejected: new DraftRejectedError(feedback, attempts, theme) };
 }
 
+function parsesAsJson(text: string) {
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// A strict-JSON refusal whose text only needs its paragraphs unwrapped.
+function repairedAnswer(error: unknown) {
+  return error instanceof GroqInvalidJsonError ? repairDraftJson(error.failedGeneration) : undefined;
+}
+
 // Like the draft, an empty or malformed strict-JSON review is usually the reasoning
-// spending the whole completion budget, so it is asked once more with low effort.
+// spending the whole completion budget, so it is asked once more with low effort. A
+// review that only nested its paragraphs is unwrapped instead.
 async function requestReview(draft: PostedDecision, results: ResearchResult[], now: Date, fetcher: typeof fetch) {
   try {
     return await completeGroq(buildReviewRequest(draft, results, now), "review", fetcher);
   } catch (error) {
     if (!(error instanceof GroqInvalidJsonError)) throw error;
-    return completeGroq(buildReviewRequest(draft, results, now, "low"), "review", fetcher);
+    const repaired = repairedAnswer(error);
+    if (repaired !== undefined) return repaired;
+  }
+  try {
+    return await completeGroq(buildReviewRequest(draft, results, now, "low"), "review", fetcher);
+  } catch (error) {
+    const repaired = repairedAnswer(error);
+    if (repaired === undefined) throw error;
+    return repaired;
   }
 }
 
@@ -207,6 +237,15 @@ async function reviewDraft(
   }
   if (!reviewed.shouldPost) return reviewed;
   const candidate = { ...reviewed, theme: draft.theme };
+  // A source the review dropped as unrelated was propping up the evidence bar. The
+  // validated draft must not ship on it, so this counts as the theme declining.
+  const dropped = draft.sources.filter((source) => !candidate.sources.some((kept) => kept.url === source.url));
+  if (dropped.length && !meetsEvidenceBar(candidate.sources.map((source) => source.url))) {
+    return {
+      shouldPost: false,
+      reason: `Review found a cited source that does not report this story (${dropped.map((source) => source.title).join(", ")}), and the rest cannot clear the evidence bar.`,
+    };
+  }
   const violations = draftViolations(candidate, now, context);
   if (violations.length) {
     notes.push(`Review rewrite dropped because it broke a rule (${violations.join(" ")}); the validated draft stands.`);

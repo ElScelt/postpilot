@@ -33,3 +33,7 @@ test("the review sees the hard rules, the evidence and the draft, and answers in
   assert.equal(body.response_format.type, "json_schema");
   assert.equal(body.max_completion_tokens, 3000);
 });
+
+test("the review checks that every cited source reports the story", () => {
+  assert.match(reviewPrompt(draft, [], new Date("2026-09-03T18:00:00.000Z")), /Check every URL in sourceUrls against the evidence/);
+});

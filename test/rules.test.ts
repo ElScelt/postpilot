@@ -252,3 +252,42 @@ test("talk about the research itself is rejected", () => {
 test("a figure with a K, M or B suffix is checked like any other number", () => {
   assert.deepEqual(unsupportedNumbers("a 10M-token grant, 2B parameters and 50k users", ["a 10M token grant for 50K users"]), ["2B"]);
 });
+
+// From a queued post on the first live test, with every full stop missing.
+test("a paragraph without a closing full stop and run-on sentences are rejected", () => {
+  const unterminated = `${hook}\n\n${body}\n\nIt also makes error handling deterministic\n\n${question}`;
+  assert.throws(() => validateDraft(draft(unterminated), now), /paragraph ends without a full stop \("\.\.\.It also makes error handling deterministic"\)/);
+  const runOn = `${hook}\n\n${body} Forbes covered Structured Outputs announced in August 2024 The same source notes a limit.\n\n${question}`;
+  assert.throws(() => validateDraft(draft(runOn), now), /runs two sentences together without a full stop \("2024 The"\)/);
+  const checklist = `${hook}\n\n${body}\n\nVerify the version is at least 15.5\nAdd an integration test\n\n${question}`;
+  assert.doesNotThrow(() => validateDraft(draft(checklist), now), "checklist lines may end without a full stop");
+  const title = `${hook}\n\n${body} Forbes ran Why Everyone Is Talking About The AI That Does Not Chat.\n\n${question}`;
+  assert.doesNotThrow(() => validateDraft(draft(title), now), "a title-cased phrase is not a run-on");
+});
+
+test("run-together compounds are rejected", () => {
+  for (const sentence of ["It removes adhoc string parsing.", "The trade off is tighter prompts."]) {
+    const text = `${hook}\n\n${body}\n\n${sentence}\n\n${question}`;
+    assert.throws(() => validateDraft(draft(text), now), /misspells a compound word/, sentence);
+  }
+  const verb = `${hook}\n\n${body}\n\nYou trade off latency for accuracy.\n\n${question}`;
+  assert.doesNotThrow(() => validateDraft(draft(verb), now));
+});
+
+test("a present-tense claim about the author's own system is invented history", () => {
+  for (const sentence of ["Our component library renders dynamic OG images from user-provided text.", "My team uses Vitest in CI.", "Our services talked to Redis."]) {
+    const text = `${hook}\n\n${body}\n\n${sentence}\n\n${question}`;
+    assert.throws(() => validateDraft(draft(text), now), /invented history/, sentence);
+  }
+  for (const sentence of ["If your component library renders OG images, upgrade first.", "Our app would need a fallback.", "I would treat our app as a client.", "Our app users expect fast pages."]) {
+    const text = `${hook}\n\n${body}\n\n${sentence}\n\n${question}`;
+    assert.doesNotThrow(() => validateDraft(draft(text), now), sentence);
+  }
+});
+
+test("a short draft is told how many words to add", () => {
+  const text = `${hook}\n\n${filler.repeat(3)}\n\n${question}`;
+  const target = Math.round((config().limits.minWords + config().limits.maxWords) / 2);
+  const words = text.split(/\s+/).length;
+  assert.throws(() => validateDraft(draft(text), now), new RegExp(`received ${words}\. Add about ${target - words} words`));
+});
