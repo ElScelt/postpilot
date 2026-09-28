@@ -17,6 +17,10 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: eslint
         update-types: ["version-update:semver-major"]
+      # The types follow the Node.js the project runs on (22 in .nvmrc and CI); a newer
+      # major would type-check calls that do not exist at runtime.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
