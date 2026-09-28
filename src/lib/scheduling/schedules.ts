@@ -9,6 +9,10 @@ type PublishSettings = Pick<Config, "timeZone" | "publishHour">;
 // ever holds one.
 export const runScheduleId = "postpilot-run";
 
+// Every run, scheduled or started from the dashboard, is retried this many times with a
+// fresh sample; the run route alerts only on the last attempt.
+export const runRetries = 3;
+
 export function runCron({ timeZone, schedule }: ScheduleSettings = config()) {
   const days = [...new Set(schedule.days)].map((day) => weekdays.indexOf(day)).sort((a, b) => a - b);
   return `CRON_TZ=${timeZone} 0 ${schedule.runHour} * * ${days.join(",")}`;
@@ -21,7 +25,7 @@ export function scheduleRequest(destination = automationUrl(), settings: Schedul
     cron: runCron(settings),
     body: "{}",
     headers: { "Content-Type": "application/json" },
-    retries: 3,
+    retries: runRetries,
     label: runScheduleId,
   };
 }

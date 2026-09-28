@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { authorizeDashboard } from "@/lib/security/dashboard-auth";
 import { cancelPost, editPostText } from "@/lib/storage/posts";
 import { automationUrl, qstash } from "@/lib/scheduling/qstash";
+import { runRetries } from "@/lib/scheduling/schedules";
 import { errorMessage } from "@/lib/errors";
 
 // The proxy already gates /dashboard, but a server action is a POST to a URL, so each
@@ -27,7 +28,9 @@ export async function runNow(): Promise<ActionResult> {
     const result = await qstash().publishJSON({
       url: automationUrl(),
       body: {},
-      retries: 0,
+      // The same budget as the schedule: with none, the run route took the first failure
+      // for a retryable one and never sent the alert.
+      retries: runRetries,
       label: "postpilot-run-manual",
     });
     revalidatePath("/dashboard");

@@ -7,14 +7,12 @@ import { DraftRejectedError } from "@/lib/drafting/pipeline";
 import { pingHeartbeat } from "@/lib/notify/heartbeat";
 import { notifyOperator } from "@/lib/notify/ntfy";
 import { errorMessage } from "@/lib/errors";
+import { runRetries } from "@/lib/scheduling/schedules";
 
 // Research plus two drafting calls take 30 to 120 seconds; this is the Fluid compute
 // default, stated here so a project without Fluid fails at deploy time instead of
 // killing every run at ten seconds.
 export const maxDuration = 300;
-
-// The QStash schedule retries a failed run three times, so the fourth attempt is the last.
-const scheduleRetries = 3;
 
 // The body carries nothing. Schedules created before the run lost its slot still send
 // {"slot":"morning"}, so that shape stays accepted.
@@ -38,7 +36,7 @@ export async function POST(request: Request) {
     return new NextResponse("The request body must be empty or a JSON object.", { status: 400 });
   }
   const signed = isQStashSigned(request);
-  const finalAttempt = !signed || Number(request.headers.get("upstash-retried") ?? 0) >= scheduleRetries;
+  const finalAttempt = !signed || Number(request.headers.get("upstash-retried") ?? 0) >= runRetries;
   try {
     const result = await runAutomation(new Date(), {}, { manual: !signed, finalAttempt });
     await pingHeartbeat(true);
