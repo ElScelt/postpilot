@@ -65,7 +65,7 @@ function fakes(options: Options = {}) {
     notifyDraftQueued: async () => { calls.notified += 1; return true; },
     notifyOperator: async (alert) => { calls.alerts.push(alert.title); return true; },
     recordAutomationRun: async (run) => { calls.runs.push(run); return run; },
-    acquireRunLock: async () => !options.locked,
+    acquireRunLock: async () => (options.locked ? undefined : "token"),
     releaseRunLock: async () => { calls.released = true; },
   };
   return { deps, calls };
@@ -134,13 +134,32 @@ test("nags from ten days before the authorization expires", async () => {
 test("refuses to run while another run holds the lock for the same morning", async () => {
   const { deps, calls } = fakes({ locked: true });
   const lockKeys: string[] = [];
-  deps.acquireRunLock = async (key) => { lockKeys.push(key); return false; };
+  deps.acquireRunLock = async (key) => { lockKeys.push(key); return undefined; };
   const result = await runAutomation(now, deps);
   assert.deepEqual(lockKeys, ["postpilot:run-lock:2026-09-07"]);
   assert.equal(result.status, "skipped");
   assert.match(result.reason, /already in progress/);
   assert.equal(calls.drafted.length, 0);
   assert.equal(calls.runs[0]!.status, "skipped");
+});
+
+test("a run killed while holding the lock does not block QStash's first retry", async () => {
+  // A lock that expires the way Redis's does, and a release that never happens, as when
+  // the platform kills the function at maxDuration.
+  let clock = now.getTime();
+  let heldUntil = 0;
+  const { deps } = fakes();
+  deps.acquireRunLock = async (_key, ttlSeconds) => {
+    if (clock < heldUntil) return undefined;
+    heldUntil = clock + ttlSeconds * 1000;
+    return "token";
+  };
+  deps.releaseRunLock = async () => {};
+  await runAutomation(now, deps);
+  // Killed at the time limit; QStash's first retry follows about twelve seconds later.
+  clock += 300_000 + 12_000;
+  const retry = await runAutomation(new Date(clock), deps);
+  assert.equal(retry.status, "scheduled");
 });
 
 test("records a rejected draft with its attempts, alerts on the final attempt, and rethrows", async () => {

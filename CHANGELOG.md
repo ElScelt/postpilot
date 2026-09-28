@@ -10,6 +10,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Fixed
 
+- The run lock expires after the run route's 300-second limit instead of ten minutes, and holds a per-run token that only its own run can release. A run killed at the limit used to hold the lock through QStash's retries.
 - A Reject that fails, for example because Redis is unreachable, answers 500 with a "Reject failed, try again" page instead of claiming the post was already handled. Only a post that is no longer queued gets "Nothing to do", and the page names its state.
 - Redis credentials are read from `KV_REST_API_URL` and `KV_REST_API_TOKEN`, the names the Vercel marketplace integration adds, as well as from `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`. A marketplace setup used to fail the Setup card and every run.
 - The test suite runs on the default configuration, so a customised `postpilot.config.ts` no longer fails tests that expect UTC or an empty stack; one test still validates the file itself.

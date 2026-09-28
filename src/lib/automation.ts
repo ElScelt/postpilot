@@ -7,7 +7,8 @@ import { linkedInTokenStatus } from "./linkedin/api";
 import { notifyDraftQueued, notifyOperator } from "./notify/ntfy";
 import { appUrl } from "./env";
 import { connectUrl } from "./linkedin/oauth";
-import { redis } from "./storage/redis";
+import { acquireRunLock, releaseRunLock } from "./storage/run-lock";
+import { runTimeLimitSeconds } from "./scheduling/qstash";
 import { formatDateTime } from "./scheduling/time";
 import type { RecentActivity } from "./drafting/prompt";
 import { errorMessage } from "./errors";
@@ -24,16 +25,17 @@ export type AutomationDeps = {
   notifyDraftQueued: typeof notifyDraftQueued;
   notifyOperator: typeof notifyOperator;
   recordAutomationRun: typeof recordAutomationRun;
-  acquireRunLock: (key: string, ttlSeconds: number) => Promise<boolean>;
-  releaseRunLock: (key: string) => Promise<void>;
+  // A token for this run, or undefined while another run holds the lock.
+  acquireRunLock: (key: string, ttlSeconds: number) => Promise<string | undefined>;
+  releaseRunLock: (key: string, token: string) => Promise<void>;
 };
 
 function productionDeps(): AutomationDeps {
   return {
     listPosts, updatePost, schedulePost, linkedInTokenStatus, generateGroundedDraft,
     reconcileAutomationSchedules, notifyDraftQueued, notifyOperator, recordAutomationRun,
-    acquireRunLock: async (key, ttlSeconds) => (await redis().set(key, "1", { nx: true, ex: ttlSeconds })) === "OK",
-    releaseRunLock: async (key) => { await redis().del(key); },
+    acquireRunLock: (key, ttlSeconds) => acquireRunLock(key, ttlSeconds),
+    releaseRunLock: (key, token) => releaseRunLock(key, token),
   };
 }
 
@@ -48,7 +50,6 @@ export type RunOptions = {
 
 const reconnect = "Reconnect at /api/auth/linkedin.";
 const recentWindowMs = 14 * 24 * 60 * 60 * 1000;
-const lockTtlSeconds = 10 * 60;
 
 export async function runAutomation(
   now = new Date(),
@@ -63,9 +64,12 @@ export async function runAutomation(
 
   // Two runs for the same morning (a manual test landing during the scheduled firing)
   // would each pass the duplicate check below against a stale snapshot and queue two
-  // posts. The lock is released at the end so a retry after a failure can still run.
+  // posts. The lock is released at the end so a retry after a failure can still run, and
+  // it expires when the platform would kill the run, so a killed run cannot hold it
+  // through QStash's retries.
   const lockKey = `postpilot:run-lock:${scheduledFor.toISOString().slice(0, 10)}`;
-  if (!(await deps.acquireRunLock(lockKey, lockTtlSeconds))) {
+  const lockToken = await deps.acquireRunLock(lockKey, runTimeLimitSeconds);
+  if (!lockToken) {
     const reason = "Another automation run for this morning is already in progress.";
     await deps.recordAutomationRun({ ranAt, status: "skipped", reason });
     return { status: "skipped" as const, reason };
@@ -209,7 +213,7 @@ export async function runAutomation(
       warnings,
     };
   } finally {
-    await deps.releaseRunLock(lockKey);
+    await deps.releaseRunLock(lockKey, lockToken);
   }
 }
 

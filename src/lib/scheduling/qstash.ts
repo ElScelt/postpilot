@@ -17,6 +17,11 @@ export function automationUrl() {
 // fresh sample; the run route alerts only on the last attempt.
 export const runRetries = 3;
 
+// The run route's maxDuration. The run lock and the drafting deadline are derived from
+// it, so a run that the platform kills leaves nothing behind that outlives it. Next
+// reads maxDuration statically, so route.ts repeats the number and a test pins the two.
+export const runTimeLimitSeconds = 300;
+
 // Which delivery of a message this is. QStash counts retries in Upstash-Retried, so the
 // last one is where alerts belong: a failure QStash will retry is not yet a lost night.
 export function deliveryAttempt(request: Request, retries: number) {
