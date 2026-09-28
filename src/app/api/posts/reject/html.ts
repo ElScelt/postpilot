@@ -23,6 +23,8 @@ export function page(title: string, body: string, status = 200) {
 
 export const buttonStyle = "font:inherit;padding:.75rem 1.25rem;border-radius:.5rem;border:0;color:#fff";
 
+// 403, so the ntfy Reject button reports a failure: a link signed with a rotated
+// AUTOMATION_SECRET cancels nothing, and the post still publishes.
 export function invalidLinkPage() {
-  return page("Invalid link", "<h1>Invalid or expired link</h1>");
+  return page("Invalid link", "<h1>Invalid or expired link</h1><p>Nothing was rejected. Reject the post from the dashboard instead.</p>", 403);
 }

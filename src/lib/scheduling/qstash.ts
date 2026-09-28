@@ -15,6 +15,10 @@ export function publishingUrl() {
   return `${appUrl()}/api/cron/publish`;
 }
 
+// Message labels, so the QStash console can filter postpilot's deliveries.
+export const publishLabel = "postpilot-publish";
+export const manualRunLabel = "postpilot-run-manual";
+
 export function automationUrl() {
   return `${appUrl()}/api/automation/run`;
 }

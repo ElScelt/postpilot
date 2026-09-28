@@ -197,6 +197,17 @@ test("rejects the same theme two posts in a row", () => {
   assert.doesNotThrow(() => validateDraft(draft(text, { theme: "frontend" }), now, { recentThemes: ["frontend", "data"] }));
 });
 
+test("a single configured theme may follow itself, or no draft could ever pass", () => {
+  const text = `${hook}
+
+${body}
+
+Where would you cut the first render?`;
+  const settings = config();
+  const onlyFrontend = { ...settings, themes: { frontend: settings.themes.frontend! } };
+  assert.doesNotThrow(() => validateDraft(draft(text, { theme: "frontend" }), now, { recentThemes: ["frontend"] }, onlyFrontend));
+});
+
 test("rejects numbers the evidence does not state", () => {
   const text = `Input tokens now cost $4 per million, down from $5.\n\n${body}\n\nI would hold any model to at least 45 tokens per request before switching.\n\nWhere would you cut the first render?`;
   assert.throws(

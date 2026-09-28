@@ -38,7 +38,7 @@ sequenceDiagram
 2. **Sweeps** posts still queued hours after their slot, marks them failed and alerts you. A post a killed delivery left `publishing` may be on LinkedIn, so it is marked failed with an alert to check LinkedIn and is never retried.
 3. **Reconciles** the QStash schedule with the one computed from `postpilot.config.ts`. A failure here only adds a warning.
 4. **Checks the LinkedIn token.**
-   - A missing or expired token stops the run with a high-priority alert. The run is recorded as `stopped` and the healthcheck is told it failed, since no night can succeed until you reconnect.
+   - A missing or expired token stops the run with a high-priority alert. The run history records it as failed; the route's answer says `stopped`, and the healthcheck is told the night failed, since no night can succeed until you reconnect.
    - If the token expires before the publish time, the draft still queues but you get an alert.
    - In the token's last ten days you get a reminder.
 5. **Skips** if an automated post is already queued or posted for that day. If an earlier attempt stored that day's post but crashed before its publish message was queued or its notice was sent, the run finishes that post instead of drafting another.

@@ -56,7 +56,7 @@ const academicCitation = new RegExp(
 // and scoped package names such as @tanstack/react-query are everyday vocabulary here.
 const linkOrEmail = /https?:\/\/|\bwww\.|[\w.+-]+@[\w-]+\.[a-z]{2,}/i;
 
-type RuleSettings = Pick<Config, "limits" | "persona">;
+type RuleSettings = Pick<Config, "limits" | "persona" | "themes">;
 
 function escapeRegExp(text: string) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -145,7 +145,7 @@ const checks: Check[] = [
   patternCheck(bannedQuestionOpening, () => `Closing question opens with "${bannedQuestionOpener}"; ask about a specific trade-off in a different form.`, "question"),
   ({ text }) => (text.length > maxPostLength ? `Draft exceeds LinkedIn's ${maxPostLength}-character limit.` : undefined),
   ({ hook, question, context }) => varietyViolations(hook, question, context.recentPosts ?? []),
-  ({ draft, context }) => themeViolations(draft.theme, context.recentThemes ?? []),
+  ({ draft, context, themes }) => themeViolations(draft.theme, context.recentThemes ?? [], Object.keys(themes).length),
   ({ text }) => {
     const spelled = spelledNumbers(text);
     return spelled.length
@@ -165,10 +165,10 @@ export function draftViolations(
   draft: Draft,
   now = new Date(),
   context: DraftContext = {},
-  { limits, persona }: RuleSettings = config(),
+  { limits, persona, themes }: RuleSettings = config(),
 ) {
   const text = draft.text.trim();
-  const parts: DraftParts = { draft, text, hook: firstParagraph(text), question: lastParagraph(text), now, context, limits, persona };
+  const parts: DraftParts = { draft, text, hook: firstParagraph(text), question: lastParagraph(text), now, context, limits, persona, themes };
   return checks.flatMap((check) => check(parts) ?? []);
 }
 
@@ -204,9 +204,11 @@ function varietyViolations(hook: string, closingQuestion: string, recentPosts: s
   return violations;
 }
 
-function themeViolations(theme: string | undefined, recentThemes: string[]) {
+// With a single theme configured there is nothing to rotate to, and the rule would
+// reject every draft once a post exists.
+function themeViolations(theme: string | undefined, recentThemes: string[], themeCount: number) {
   const previous = recentThemes.at(-1);
-  if (theme && previous && theme === previous) {
+  if (themeCount > 1 && theme && previous && theme === previous) {
     return [`Draft repeats the previous post's theme (${theme}); the run must not publish the same theme twice in a row.`];
   }
   return [];

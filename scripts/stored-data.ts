@@ -15,6 +15,9 @@ export type KeyReport = {
   // Field names this version does not know. They are kept, never read.
   unknownFields: Record<string, number>;
   problems: string[];
+  // Entries this version cannot read but works around: the run history leaves such a
+  // run off the dashboard and keeps it stored, so it does not stand in the way of a deploy.
+  skipped: string[];
 };
 
 // Checks stored data against the schemas this version reads it with. The report holds
@@ -30,11 +33,13 @@ export function checkStoredData(data: StoredData): KeyReport[] {
   }
   const postsReport = checkList(queueKey, posts, postSchema);
   if (postsProblem) postsReport.problems.push(postsProblem);
-  return [postsReport, checkList(runsKey, data.runs, runSchema), checkList(tokenKey, data.token, tokenSchema, false)];
+  const runsReport = checkList(runsKey, data.runs, runSchema);
+  if (Array.isArray(data.runs)) [runsReport.skipped, runsReport.problems] = [runsReport.problems, []];
+  return [postsReport, runsReport, checkList(tokenKey, data.token, tokenSchema, false)];
 }
 
 function checkList(key: string, value: unknown, schema: z.ZodObject, isList = true): KeyReport {
-  const report: KeyReport = { key, entries: 0, statuses: {}, unknownFields: {}, problems: [] };
+  const report: KeyReport = { key, entries: 0, statuses: {}, unknownFields: {}, problems: [], skipped: [] };
   if (value === null || value === undefined) return report;
   if (isList && !Array.isArray(value)) {
     report.problems.push("not a list");

@@ -121,9 +121,15 @@ async function runSearch(
   const payload = responseSchema.parse(await response.json());
   return payload.results.flatMap((result): ResearchResult[] => {
     const publishedDate = normalizeDate(result.published_date);
-    if (!publishedDate || !URL.canParse(result.url)) return [];
+    if (!publishedDate || !isWebUrl(result.url)) return [];
     return [{ ...result, publishedDate }];
   });
+}
+
+// Source URLs are rendered as links on the review page and the dashboard, where a
+// javascript: URL would run when tapped.
+function isWebUrl(url: string) {
+  return URL.canParse(url) && ["http:", "https:"].includes(new URL(url).protocol);
 }
 
 function normalizeDate(value?: string | null) {

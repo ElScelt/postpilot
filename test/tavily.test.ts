@@ -11,6 +11,13 @@ const result = {
   content: "Developer details", published_date: "2026-07-12T09:30:00Z",
 };
 
+test("keeps only web pages, since every source URL becomes a link", async () => {
+  const results = await searchThemeEvidence("ai-integration", new Date("2026-07-14T12:00:00Z"), async () => Response.json({
+    results: [result, { ...result, url: "javascript:alert(1)" }, { ...result, url: "data:text/html,hi" }],
+  }));
+  assert.deepEqual([...new Set(results.map((entry) => entry.url))], [result.url]);
+});
+
 test("requests bounded, recent Tavily news evidence", async () => {
   const bodies: Array<Record<string, unknown>> = [];
   const results = await searchThemeEvidence(

@@ -331,6 +331,15 @@ test("the hard rules follow the configured persona and limits", () => {
   assert.match(hardRules(), /Keep the hook under 18 words \(about 120 characters\)/);
 });
 
+test("with a single theme the prompt does not forbid repeating it", () => {
+  const settings = config();
+  const request = buildDraftRequest(
+    { recent: { ...noRecent, themes: ["ai-integration"], previousTheme: "ai-integration" }, results: [{ ...source, content: "Evidence" }], now, theme: "ai-integration" },
+    { ...settings, themes: { "ai-integration": settings.themes["ai-integration"]! } },
+  );
+  assert.doesNotMatch(prompt(request), /must not repeat it/);
+});
+
 test("the draft prompt is written for the persona and limits it is given", () => {
   const settings = config();
   const request = buildDraftRequest(

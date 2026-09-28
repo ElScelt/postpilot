@@ -3,6 +3,11 @@ import { redis } from "./redis";
 
 export type LockClient = Pick<Redis, "set" | "eval">;
 
+// One lock per publish date: postpilot:run-lock:2026-09-07.
+export function runLockKey(scheduledFor: Date) {
+  return `postpilot:run-lock:${scheduledFor.toISOString().slice(0, 10)}`;
+}
+
 // Deletes the lock only while it still holds this run's token. A run that outlived its
 // lock must not release the lock a later run has taken since.
 export const releaseScript = `

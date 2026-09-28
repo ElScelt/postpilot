@@ -11,9 +11,9 @@ const token = { accessToken: "secret-token", memberId: "member", expiresAt: 1_80
 
 test("data this version can read is reported with its statuses and nothing else", () => {
   const [posts, runs, stored] = checkStoredData({ posts: JSON.stringify([post, { ...post, id: "b", status: "queued" }]), runs: [run], token });
-  assert.deepEqual(posts, { key: "postpilot:posts", entries: 2, statuses: { posted: 1, queued: 1 }, unknownFields: {}, problems: [] });
+  assert.deepEqual(posts, { key: "postpilot:posts", entries: 2, statuses: { posted: 1, queued: 1 }, unknownFields: {}, problems: [], skipped: [] });
   assert.deepEqual(runs!.problems, []);
-  assert.deepEqual(stored, { key: "postpilot:token", entries: 1, statuses: {}, unknownFields: {}, problems: [] });
+  assert.deepEqual(stored, { key: "postpilot:token", entries: 1, statuses: {}, unknownFields: {}, problems: [], skipped: [] });
 });
 
 test("an old status, a missing field and an unknown field are each named", () => {
@@ -24,6 +24,13 @@ test("an old status, a missing field and an unknown field are each named", () =>
   assert.equal(posts!.problems.length, 2);
   assert.match(posts!.problems.join("\n"), /^entry 1: status: /m);
   assert.match(posts!.problems.join("\n"), /^entry 1: createdAt: /m);
+});
+
+test("a run record this version cannot read is skipped, as the dashboard skips it, not a problem", () => {
+  const [, runs] = checkStoredData({ posts: null, runs: [run, { ...run, status: "stopped" }], token: null });
+  assert.deepEqual(runs!.problems, []);
+  assert.equal(runs!.skipped.length, 1);
+  assert.match(runs!.skipped[0]!, /^entry 1: status: /);
 });
 
 test("the report never repeats a stored value", () => {

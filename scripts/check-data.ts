@@ -23,6 +23,7 @@ async function main() {
     if (Object.keys(report.statuses).length) console.log(`  statuses: ${summary(report.statuses)}`);
     if (Object.keys(report.unknownFields).length) console.log(`  fields this version keeps but does not read: ${summary(report.unknownFields)}`);
     for (const problem of report.problems) console.log(`  cannot read ${problem}`);
+    for (const entry of report.skipped) console.log(`  cannot read ${entry} (left off the dashboard and kept; not a problem for deploying)`);
   }
   const readable = reports.every((report) => report.problems.length === 0);
   console.log(readable ? "\nThis version can read everything stored." : "\nThis version cannot read everything stored; do not deploy it over this data.");

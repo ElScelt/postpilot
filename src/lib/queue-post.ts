@@ -1,5 +1,5 @@
 import { addPost, postStatuses, transitionPost, type AutomationMetadata, type PostStoreDeps, type QueuedPost } from "./storage/posts";
-import { deliveryTimestamp, publishingUrl, qstash, qstashTimeoutMs } from "./scheduling/qstash";
+import { deliveryTimestamp, publishingUrl, publishLabel, qstash, qstashTimeoutMs } from "./scheduling/qstash";
 import { withTimeout } from "./async";
 import { publishRetries } from "./limits";
 import { errorMessage } from "./errors";
@@ -43,7 +43,7 @@ export async function enqueueDelivery(post: Pick<QueuedPost, "id" | "scheduledFo
     body: { postId: post.id },
     notBefore: deliveryTimestamp(post.scheduledFor),
     retries: publishRetries,
-    label: ["postpilot-publish", post.id],
+    label: [publishLabel, post.id],
     redact: { body: true },
     deduplicationId: post.id,
   }), qstashTimeoutMs, "QStash");

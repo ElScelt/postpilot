@@ -1,14 +1,13 @@
 import { DraftRejectedError, draftingBudgetMs, generateGroundedDraft } from "./drafting/pipeline";
-import { scheduledPostTime } from "./scheduling/schedules";
 import { abandonedPosts, isLive, listPosts, PostStateError, transitionPost, type QueuedPost } from "./storage/posts";
 import { scheduleDelivery, schedulePost } from "./queue-post";
 import { recordAutomationRun, type AutomationRun } from "./storage/runs";
-import { reconcileAutomationSchedules } from "./scheduling/schedules";
+import { reconcileAutomationSchedules, scheduledPostTime } from "./scheduling/schedules";
 import { linkedInTokenStatus, reconnectWarningDays } from "./linkedin/token";
 import { notifyDraftQueued, notifyOperator } from "./notify/ntfy";
 import { appUrl, envValue } from "./env";
 import { connectPath, connectUrl } from "./linkedin/oauth";
-import { acquireRunLock, releaseRunLock } from "./storage/run-lock";
+import { acquireRunLock, releaseRunLock, runLockKey } from "./storage/run-lock";
 import { runTimeLimitSeconds } from "./limits";
 import { dayMs, formatDateTime } from "./scheduling/time";
 import type { RecentActivity } from "./drafting/prompt";
@@ -78,7 +77,7 @@ export async function runAutomation(
   // posts. The lock is released at the end so a retry after a failure can still run, and
   // it expires when the platform would kill the run, so a killed run cannot hold it
   // through QStash's retries.
-  const lockKey = `postpilot:run-lock:${scheduledFor.toISOString().slice(0, 10)}`;
+  const lockKey = runLockKey(scheduledFor);
   const lockToken = await deps.acquireRunLock(lockKey, runTimeLimitSeconds);
   if (!lockToken) {
     // Not a run and not a skip: the route asks QStash to come back, and the retry finds

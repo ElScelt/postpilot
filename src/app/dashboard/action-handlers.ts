@@ -1,5 +1,5 @@
 import { cancelPost, editPostText, notQueuedReason, PostNotQueuedError, type PostStoreDeps } from "@/lib/storage/posts";
-import { automationUrl, qstash, qstashTimeoutMs } from "@/lib/scheduling/qstash";
+import { automationUrl, manualRunLabel, qstash, qstashTimeoutMs } from "@/lib/scheduling/qstash";
 import { withTimeout } from "@/lib/async";
 import { runRetries } from "@/lib/limits";
 import { errorMessage } from "@/lib/errors";
@@ -33,7 +33,7 @@ export async function runNowAction(deps: ActionDeps): Promise<ActionResult> {
       // The same budget as the schedule: with none, the run route took the first failure
       // for a retryable one and never sent the alert.
       retries: runRetries,
-      label: "postpilot-run-manual",
+      label: manualRunLabel,
     }), qstashTimeoutMs, "QStash");
     deps.revalidate();
     return { ok: true, message: `Run queued (QStash message ${result.messageId}). The draft or the reason arrives on ntfy in a minute or two.` };

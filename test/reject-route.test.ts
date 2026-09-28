@@ -32,6 +32,7 @@ function reviewRequest(id: string, method: "GET" | "POST", token = rejectToken(i
 test("a link with a wrong signature shows the invalid-link page and cancels nothing", async () => {
   const { deps, read } = fakes();
   const response = await handleReject(reviewRequest("p1", "POST", "0".repeat(64)), deps);
+  assert.equal(response.status, 403, "the ntfy button must not report success");
   assert.match(await response.text(), /Invalid or expired link/);
   assert.equal(read()[0]!.status, "queued");
 });
