@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- CI also runs `npm run build`, and its actions are pinned to commit SHAs.
+
+### Fixed
+
+- Redis credentials are read from `KV_REST_API_URL` and `KV_REST_API_TOKEN`, the names the Vercel marketplace integration adds, as well as from `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`. A marketplace setup used to fail the Setup card and every run.
+- The test suite runs on the default configuration, so a customised `postpilot.config.ts` no longer fails tests that expect UTC or an empty stack; one test still validates the file itself.
+
 ## [1.0.0] - 2026-09-28
 
 First public release.
@@ -37,5 +48,6 @@ First public release.
   - a strict-JSON answer that nests its paragraphs is unwrapped instead of discarded, and any other malformed answer gets a correction naming what was wrong;
   - the review pass drops a cited source that reports a different story, and declines the post when the remaining sources cannot clear the evidence bar;
   - account, sign-in and status portals under a vendor domain (such as `myaccount.microsoft.com`) never count as sources.
-- The test suite runs on the default configuration, so a customised `postpilot.config.ts` no longer fails tests that expect UTC or an empty stack; one test still validates the file itself.
-- Redis credentials are read from `KV_REST_API_URL` and `KV_REST_API_TOKEN`, the names the Vercel marketplace integration adds, as well as from `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`.
+
+[Unreleased]: https://github.com/ElScelt/postpilot/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/ElScelt/postpilot/releases/tag/v1.0.0
