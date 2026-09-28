@@ -43,7 +43,8 @@ export type DraftOptions = {
   fetcher?: typeof fetch;
   // Wall-clock limit for the whole night, as an epoch millisecond. The Groq free tier
   // admits about one request of this size a minute, so every extra theme costs up to a
-  // minute, and the run must never reach the function's own timeout.
+  // minute, and the run must never reach the function's own timeout. The run passes
+  // its own (draftingBudgetMs in automation.ts); a local draft gets the route's limit.
   deadline?: number;
   // How many themes may be drafted, not merely searched, in one run.
   maxThemesDrafted?: number;
@@ -53,14 +54,6 @@ export type DraftOptions = {
 const maxAttempts = 2;
 const defaultMaxThemesDrafted = 3;
 const minimumThemeMs = 75_000;
-
-// Drafting gets the run route's time limit less what the run still does afterwards, each
-// step bounded by its own timeout: storing the post (10 s for Redis), scheduling its
-// delivery (10 s for QStash), then the notice (three 10-second ntfy attempts with 4 s of
-// waits between them). That is 54 s at worst; past this deadline the platform would kill
-// the run before it recorded anything.
-const finishReserveMs = 60_000;
-export const draftingBudgetMs = runTimeLimitSeconds * 1000 - finishReserveMs;
 
 // Every Tavily and Groq request also ends at the deadline, whatever its own timeout, so
 // one slow answer cannot carry the run past it.
@@ -79,7 +72,7 @@ function withDeadline(fetcher: typeof fetch, deadline: number): typeof fetch {
 // with real news went untried.
 export async function generateGroundedDraft(recent: RecentActivity, options: DraftOptions = {}): Promise<DraftOutcome> {
   const now = options.now ?? new Date();
-  const deadline = options.deadline ?? Date.now() + draftingBudgetMs;
+  const deadline = options.deadline ?? Date.now() + runTimeLimitSeconds * 1000;
   const settings = options.settings ?? config();
   const run: DraftRun = { now, deadline, settings, fetcher: withDeadline(options.fetcher ?? fetch, deadline) };
   const maxThemes = options.maxThemesDrafted ?? defaultMaxThemesDrafted;

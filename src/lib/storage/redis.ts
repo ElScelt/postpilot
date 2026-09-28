@@ -18,17 +18,19 @@ export function redisCredentials(env: Environment = process.env) {
 
 // `automaticDeserialization: false` returns values as the exact strings Redis holds,
 // which a compare-and-set needs.
+// A Redis call takes milliseconds. Without a timeout a hung one would hold the run
+// until the platform kills it; with one, the run fails, records why and is retried.
+export const redisTimeoutMs = 10_000;
+
 export function redis(options: { automaticDeserialization?: boolean } = {}) {
   const { url, token } = redisCredentials() ?? {};
   if (!url || !token) {
     throw new Error("Missing Redis credentials. Connect Upstash or set its REST URL and token.");
   }
-  // A Redis call takes milliseconds. Without a timeout a hung one would hold the run
-  // until the platform kills it; with one, the run fails, records why and is retried.
   return new Redis({
     url,
     token,
-    signal: () => AbortSignal.timeout(10_000),
+    signal: () => AbortSignal.timeout(redisTimeoutMs),
     ...options,
   });
 }

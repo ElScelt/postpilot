@@ -1,10 +1,12 @@
-import { DraftRejectedError, draftingBudgetMs, generateGroundedDraft } from "./drafting/pipeline";
+import { DraftRejectedError, generateGroundedDraft } from "./drafting/pipeline";
 import { abandonedPosts, isLive, listPosts, PostStateError, transitionPost, type QueuedPost } from "./storage/posts";
 import { scheduleDelivery, schedulePost } from "./queue-post";
 import { recordAutomationRun, type AutomationRun } from "./storage/runs";
 import { reconcileAutomationSchedules, scheduledPostTime } from "./scheduling/schedules";
 import { linkedInTokenStatus, reconnectWarningDays } from "./linkedin/token";
-import { notifyDraftQueued, notifyOperator } from "./notify/ntfy";
+import { notifyDraftQueued, notifyOperator, ntfyWorstCaseMs } from "./notify/ntfy";
+import { redisTimeoutMs } from "./storage/redis";
+import { qstashTimeoutMs } from "./scheduling/qstash";
 import { appUrl, envValue } from "./env";
 import { connectPath, connectUrl } from "./linkedin/oauth";
 import { acquireRunLock, releaseRunLock, runLockKey } from "./storage/run-lock";
@@ -51,6 +53,16 @@ export type RunOptions = {
 
 const reconnect = `Reconnect at ${connectPath}.`;
 const recentWindowMs = 14 * dayMs;
+
+// Drafting gets the route's time limit less the worst case of what the run still does
+// afterwards, each step answering or timing out once: store the post, queue its publish
+// message, record the message id, send the notice with every retry, record that it was
+// sent, record the run and release the lock. Past the drafting deadline the platform
+// would kill the run before it recorded anything. A run killed later leaves the post
+// stored, and QStash's retry finishes it (finishQueuedPost).
+const redisStepsAfterDrafting = 5;
+export const finishReserveMs = redisStepsAfterDrafting * redisTimeoutMs + qstashTimeoutMs + ntfyWorstCaseMs;
+export const draftingBudgetMs = runTimeLimitSeconds * 1000 - finishReserveMs;
 const publishRetryWindowMs = 60 * 60 * 1000;
 
 // One run as the steps below see it. Whichever step ends the run, its record carries the

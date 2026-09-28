@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { recentActivity, runAutomation, type AutomationDeps } from "../src/lib/automation";
+import { draftingBudgetMs, finishReserveMs, recentActivity, runAutomation, type AutomationDeps } from "../src/lib/automation";
 import type { AutomationRun } from "../src/lib/storage/runs";
-import { DraftRejectedError, draftingBudgetMs, type DraftOutcome } from "../src/lib/drafting/pipeline";
+import { DraftRejectedError, type DraftOutcome } from "../src/lib/drafting/pipeline";
 import { runTimeLimitSeconds } from "../src/lib/limits";
 import type { RecentActivity } from "../src/lib/drafting/prompt";
 import type { TokenStatus } from "../src/lib/linkedin/token";
@@ -209,7 +209,9 @@ test("drafting ends in time for the run to queue the post before the route's lim
   };
   await runAutomation(now, deps);
   assert.equal(deadline, now.getTime() + draftingBudgetMs);
-  assert.ok(draftingBudgetMs < runTimeLimitSeconds * 1000);
+  assert.equal(draftingBudgetMs + finishReserveMs, runTimeLimitSeconds * 1000);
+  // Five Redis steps, QStash and three ntfy attempts with their waits.
+  assert.equal(finishReserveMs, 94_000);
 });
 
 test("records a rejected draft with its attempts, alerts on the final attempt, and rethrows", async () => {
