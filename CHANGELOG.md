@@ -10,6 +10,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Fixed
 
+- A QStash delivery that finds another run in progress answers 503, so QStash retries it, instead of recording a skip and pinging the heartbeat as healthy. The last retry alerts. Before, a killed run's retries all ended as a silent skip and the night was lost with no alert.
 - The run lock expires after the run route's 300-second limit instead of ten minutes, and holds a per-run token that only its own run can release. A run killed at the limit used to hold the lock through QStash's retries.
 - A Reject that fails, for example because Redis is unreachable, answers 500 with a "Reject failed, try again" page instead of claiming the post was already handled. Only a post that is no longer queued gets "Nothing to do", and the page names its state.
 - Redis credentials are read from `KV_REST_API_URL` and `KV_REST_API_TOKEN`, the names the Vercel marketplace integration adds, as well as from `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`. A marketplace setup used to fail the Setup card and every run.

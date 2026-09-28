@@ -137,10 +137,10 @@ test("refuses to run while another run holds the lock for the same morning", asy
   deps.acquireRunLock = async (key) => { lockKeys.push(key); return undefined; };
   const result = await runAutomation(now, deps);
   assert.deepEqual(lockKeys, ["postpilot:run-lock:2026-09-07"]);
-  assert.equal(result.status, "skipped");
+  assert.equal(result.status, "busy");
   assert.match(result.reason, /already in progress/);
   assert.equal(calls.drafted.length, 0);
-  assert.equal(calls.runs[0]!.status, "skipped");
+  assert.deepEqual(calls.runs, [], "a run that never started is not recorded");
 });
 
 test("a run killed while holding the lock does not block QStash's first retry", async () => {

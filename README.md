@@ -264,6 +264,7 @@ On the dashboard's run history: every rejected draft is listed next to the rule 
 | "A LinkedIn post never went out" | Every delivery attempt failed and the sweep retired the post. | Check LinkedIn before posting the text by hand. |
 | "Reject failed, try again" | Redis could not be reached, so the post is still queued. | Tap **Try again**. If it keeps failing, check Upstash's status and reject from the dashboard once it is back. |
 | The dashboard rejects the right password | The `AUTOMATION_SECRET` value was saved with a trailing `` or newline. | Set the variable again without it and redeploy. |
+| "The run could not start" | Every QStash delivery found another run for the same morning holding the lock. | Check the dashboard for tonight's post; if there is none, press **Run now**. |
 | Silence on a run night | The run never fired, or ntfy is down. | healthchecks.io pages you if configured. Otherwise check the QStash console and the Vercel function logs. |
 
 ## Contributing and security

@@ -2,10 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { handleRunRequest, type RunRequestDeps } from "../src/app/api/automation/run/handler";
 import { DraftRejectedError } from "../src/lib/drafting/pipeline";
-import type { RunOptions } from "../src/lib/automation";
+import { runAutomation, type RunOptions } from "../src/lib/automation";
 import type { AutomationRun } from "../src/lib/storage/runs";
+import type { QueuedPost } from "../src/lib/storage/posts";
+import { scheduledPostTime } from "../src/lib/scheduling/schedules";
 
 process.env.AUTOMATION_SECRET = "run-secret";
+process.env.APP_URL = "https://example.vercel.app";
 
 type Outcome = Awaited<ReturnType<RunRequestDeps["runAutomation"]>>;
 
@@ -94,4 +97,62 @@ test("a rejected draft is not recorded a second time", async () => {
   assert.equal(response.status, 500);
   assert.equal(calls.runs.length, 0, "runAutomation already recorded it with its attempts");
   assert.deepEqual(calls.alerts, [], "runAutomation already alerted");
+});
+
+// The real orchestrator with only its lock and storage faked, so the test covers what
+// runAutomation reports for a held lock as well as how the route answers it.
+function realRun(state: { locked: boolean; posts: QueuedPost[] }, runs: AutomationRun[]): RunRequestDeps["runAutomation"] {
+  return (now, _overrides, options) => runAutomation(now, {
+    acquireRunLock: async () => (state.locked ? undefined : "token"),
+    releaseRunLock: async () => {},
+    listPosts: async () => state.posts,
+    recordAutomationRun: async (record) => { runs.push(record); return record; },
+    reconcileAutomationSchedules: async () => [],
+    linkedInTokenStatus: async () => ({ state: "valid", daysRemaining: 40 }),
+  }, options);
+}
+
+test("a QStash retry that finds a run in progress asks to be retried instead of reporting a healthy skip", async () => {
+  const { deps, calls } = fakes();
+  deps.runAutomation = realRun({ locked: true, posts: [] }, calls.runs);
+  const response = await handleRunRequest(signed(1), deps);
+  assert.equal(response.status, 503, "QStash only retries a non-2xx answer");
+  assert.deepEqual(calls.heartbeats, [], "the run holding the lock pings when it finishes");
+  assert.deepEqual(calls.runs, [], "a retry that never ran is not a run");
+  assert.deepEqual(calls.alerts, []);
+});
+
+test("the last QStash retry that still finds the lock held alerts and fails the heartbeat", async () => {
+  const { deps, calls } = fakes();
+  deps.runAutomation = realRun({ locked: true, posts: [] }, calls.runs);
+  const response = await handleRunRequest(signed(3), deps);
+  assert.equal(response.status, 503);
+  assert.deepEqual(calls.heartbeats, [false]);
+  assert.deepEqual(calls.alerts, ["The run could not start"]);
+});
+
+test("a run started by hand while another is in progress is told so", async () => {
+  const { deps, calls } = fakes();
+  deps.runAutomation = realRun({ locked: true, posts: [] }, calls.runs);
+  const response = await handleRunRequest(manual(), deps);
+  assert.equal(response.status, 409);
+  assert.deepEqual(calls.heartbeats, []);
+});
+
+test("the retry after the first run queued its post ends cleanly", async () => {
+  const { deps, calls } = fakes();
+  const state = { locked: true, posts: [] as QueuedPost[] };
+  deps.runAutomation = realRun(state, calls.runs);
+  assert.equal((await handleRunRequest(signed(1), deps)).status, 503);
+  // The first run finishes: it queues tomorrow's post and releases the lock.
+  state.locked = false;
+  state.posts = [{
+    id: "queued", text: "t", scheduledFor: scheduledPostTime(new Date()).toISOString(), status: "queued",
+    createdAt: new Date().toISOString(), automation: { topic: "t", theme: "frontend", sources: [] },
+  }];
+  const response = await handleRunRequest(signed(2), deps);
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).status, "skipped");
+  assert.deepEqual(calls.heartbeats, [true]);
+  assert.match(calls.runs[0]!.reason!, /already created post queued/);
 });

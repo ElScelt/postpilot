@@ -45,7 +45,7 @@ sequenceDiagram
 6. **Drafts** with `generateGroundedDraft` (below), then stores the post, queues the delayed QStash publish message, and sends the ntfy notice.
 7. **Records** the run (status, themes tried, evidence hosts, rejected drafts, warnings). The route then pings the healthcheck.
 
-A draft that fails validation twice answers 500, so QStash retries with a fresh sample. A skip for lack of evidence answers 200 and stays skipped.
+A draft that fails validation twice answers 500, so QStash retries with a fresh sample. A skip for lack of evidence answers 200 and stays skipped. A delivery that finds another run for the same morning holding the lock answers 503 without recording anything or pinging the heartbeat, so QStash comes back later and finds the post queued or the lock free; only the last retry alerts.
 
 ### 2. Research (`src/lib/research/`)
 

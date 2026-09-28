@@ -70,9 +70,9 @@ export async function runAutomation(
   const lockKey = `postpilot:run-lock:${scheduledFor.toISOString().slice(0, 10)}`;
   const lockToken = await deps.acquireRunLock(lockKey, runTimeLimitSeconds);
   if (!lockToken) {
-    const reason = "Another automation run for this morning is already in progress.";
-    await deps.recordAutomationRun({ ranAt, status: "skipped", reason });
-    return { status: "skipped" as const, reason };
+    // Not a run and not a skip: the route asks QStash to come back, and the retry finds
+    // either the lock free or the post already queued.
+    return { status: "busy" as const, reason: "Another automation run for this morning is already in progress." };
   }
 
   const warnings: string[] = [];
