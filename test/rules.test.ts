@@ -99,6 +99,15 @@ test("accepts a sourced, readable post within the target length", () => {
   assert.doesNotThrow(() => validateDraft(draft(`${hook}\n\n${body}\n\n${question}`), now));
 });
 
+test("a draft over LinkedIn's length limit is rejected with the limit named", () => {
+  const long = `${hook}
+
+${filler.repeat(40)}
+
+${question}`;
+  assert.match(draftViolations(draft(long), now).join(" "), /exceeds LinkedIn's 3000-character limit/);
+});
+
 test("reports every violation at once so one correction can fix them all", () => {
   const text = `I tested this and it is just faster — really.\n\n${body}\n\n${question}`;
   const violations = draftViolations(draft(text, { sources: [] }), now);

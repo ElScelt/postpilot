@@ -2,6 +2,7 @@ import { versionedStore, type VersionedStore } from "./redis";
 import { deliveryTimestamp, publishRetries, publishTimeLimitSeconds, qstash, publishingUrl } from "../scheduling/qstash";
 import type { ResearchSource } from "../drafting/types";
 import { errorMessage } from "../errors";
+import { maxPostLength } from "../linkedin/api";
 
 export type AutomationMetadata = {
   topic: string;
@@ -192,8 +193,6 @@ export async function transitionPost(
 export async function cancelPost(id: string, deps: PostStoreDeps = {}) {
   return transitionPost(id, ["queued"], { status: "cancelled" }, deps);
 }
-
-export const maxPostLength = 3000;
 
 // The owner is the author, so an edit is checked only for being non-empty and inside
 // LinkedIn's limit; the voice rules exist to catch the model, not the person.

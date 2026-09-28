@@ -3,8 +3,8 @@ import { listAutomationRuns } from "@/lib/storage/runs";
 import { config } from "@/lib/config";
 import { describeLiveSchedule, nextScheduledRun } from "@/lib/scheduling/schedules";
 import { checkSetup, type SetupCheck } from "@/lib/setup-check";
-import { linkedInTokenStatus, loadLinkedInToken } from "@/lib/linkedin/api";
-import { listPosts, maxPostLength } from "@/lib/storage/posts";
+import { linkedInTokenStatus, loadLinkedInToken, maxPostLength, reconnectWarningDays } from "@/lib/linkedin/api";
+import { listPosts } from "@/lib/storage/posts";
 import { formatDateTime, formatDay } from "@/lib/scheduling/time";
 import { ActionButton, EditForm, RejectForm } from "./forms";
 import { runNow } from "./actions";
@@ -92,7 +92,7 @@ export default async function Dashboard() {
     ? { tone: "bad" as const, text: "LinkedIn is not connected." }
     : token.state === "expired"
       ? { tone: "bad" as const, text: `LinkedIn authorization expired ${Math.abs(token.daysRemaining)} days ago.` }
-      : token.daysRemaining <= 10
+      : token.daysRemaining <= reconnectWarningDays
         ? { tone: "warn" as const, text: `LinkedIn authorization expires in ${token.daysRemaining} days.` }
         : { tone: "ok" as const, text: `LinkedIn authorization valid for ${token.daysRemaining} more days.` };
 

@@ -4,6 +4,7 @@ import { groqRequest } from "./groq";
 import { sourceTier } from "../research/sources";
 import type { ResearchResult } from "../research/tavily";
 import { themeDefinition, themeIds, type PostTheme } from "../research/themes";
+import { dayIndex } from "../scheduling/time";
 
 export type RecentActivity = {
   // Text of posts that went out or are queued: their openers and closers must not repeat.
@@ -175,7 +176,7 @@ function generationPrompt({
   const recentTopics = recent.topics.slice(-8);
   const usedSources = recent.sourceUrls.slice(-12);
   const rejectedTopics = (recent.rejectedTopics ?? []).slice(-6);
-  const day = Math.floor(now.getTime() / (24 * 60 * 60 * 1000));
+  const day = dayIndex(now);
   const hookForm = hookForms[day % hookForms.length];
   const takeawayForm = takeawayForms[day % takeawayForms.length];
   const brief = themeDefinition(theme);

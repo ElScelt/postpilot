@@ -1,4 +1,5 @@
 import { config, type Config } from "../config";
+import { dayIndex } from "../scheduling/time";
 
 // A theme's id as written in postpilot.config.ts, such as "frontend".
 export type PostTheme = string;
@@ -26,8 +27,7 @@ export function isPostTheme(value: string, themes = themeDefinitions()) {
 // nights a week. Never-used themes are ordered by the calendar so two fresh deployments
 // on different days do not both start on the same theme.
 export function themeOrder(recentThemes: string[], now = new Date(), themes = themeIds()): PostTheme[] {
-  const day = Math.floor(now.getTime() / (24 * 60 * 60 * 1000));
-  const start = day % themes.length;
+  const start = dayIndex(now) % themes.length;
   const rotated = [...themes.slice(start), ...themes.slice(0, start)];
   return rotated
     .map((theme, index) => ({ theme, index, lastUsed: recentThemes.lastIndexOf(theme) }))

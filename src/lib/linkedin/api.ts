@@ -1,5 +1,6 @@
 import { redis, type KeyValueStore } from "../storage/redis";
 import { errorMessage } from "../errors";
+import { dayMs } from "../scheduling/time";
 
 type TokenReader = Pick<KeyValueStore, "get">;
 
@@ -48,13 +49,20 @@ export async function loadLinkedInToken(client: TokenReader = redis()) {
   return client.get<TokenRecord>(tokenKey);
 }
 
+// LinkedIn's limit on the text of a post.
+export const maxPostLength = 3000;
+
+// How early the run alerts and the dashboard warns that the authorization is running out:
+// enough notice to reconnect on a convenient evening.
+export const reconnectWarningDays = 10;
+
 // LinkedIn issues no refresh token for w_member_social, so the only recovery is walking
 // the consent flow again. Surfacing the countdown is the difference between a planned
 // reconnect and a fortnight of runs that queue posts nothing can publish.
 export async function linkedInTokenStatus(now = Date.now(), client: TokenReader = redis()): Promise<TokenStatus> {
   const token = await loadLinkedInToken(client);
   if (!token) return { state: "missing" };
-  const daysRemaining = Math.floor((token.expiresAt - now) / 86_400_000);
+  const daysRemaining = Math.floor((token.expiresAt - now) / dayMs);
   return { state: token.expiresAt <= now ? "expired" : "valid", daysRemaining };
 }
 

@@ -1,6 +1,7 @@
 import { config, type Config } from "../config";
 import { meetsEvidenceBar } from "../research/sources";
 import { recentDays } from "../scheduling/time";
+import { maxPostLength } from "../linkedin/api";
 import type { Draft, DraftContext, ResearchSource } from "./types";
 
 // The word lists are exported so the prompt quotes exactly what the validator enforces;
@@ -205,7 +206,7 @@ export function draftViolations(
   if (bannedQuestionOpeners.test(closingQuestion)) {
     violations.push('Closing question opens with "How do you balance"; ask about a specific trade-off in a different form.');
   }
-  if (text.length > 3000) violations.push("Draft exceeds LinkedIn's configured text limit.");
+  if (text.length > maxPostLength) violations.push(`Draft exceeds LinkedIn's ${maxPostLength}-character limit.`);
   violations.push(...varietyViolations(hook, closingQuestion, context.recentPosts ?? []));
   violations.push(...themeViolations(draft.theme, context.recentThemes ?? []));
   const spelled = spelledNumbers(text);

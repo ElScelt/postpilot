@@ -3,13 +3,13 @@ import { scheduledPostTime } from "./scheduling/schedules";
 import { abandonedPosts, isLive, listPosts, PostStateError, schedulePost, transitionPost, type QueuedPost } from "./storage/posts";
 import { recordAutomationRun } from "./storage/runs";
 import { reconcileAutomationSchedules } from "./scheduling/schedules";
-import { linkedInTokenStatus } from "./linkedin/api";
+import { linkedInTokenStatus, reconnectWarningDays } from "./linkedin/api";
 import { notifyDraftQueued, notifyOperator } from "./notify/ntfy";
 import { appUrl, envValue } from "./env";
 import { connectUrl } from "./linkedin/oauth";
 import { acquireRunLock, releaseRunLock } from "./storage/run-lock";
 import { runTimeLimitSeconds } from "./scheduling/qstash";
-import { formatDateTime } from "./scheduling/time";
+import { dayMs, formatDateTime } from "./scheduling/time";
 import type { RecentActivity } from "./drafting/prompt";
 import { errorMessage } from "./errors";
 
@@ -49,7 +49,7 @@ export type RunOptions = {
 };
 
 const reconnect = "Reconnect at /api/auth/linkedin.";
-const recentWindowMs = 14 * 24 * 60 * 60 * 1000;
+const recentWindowMs = 14 * dayMs;
 
 export async function runAutomation(
   now = new Date(),
@@ -147,7 +147,7 @@ export async function runAutomation(
         body: `The authorization expires before tomorrow's ${formatDateTime(scheduledFor)} publish. Reconnect now or the post will not go out.`,
         priority: 5, tags: "rotating_light", link: reconnectLink,
       });
-    } else if (token.daysRemaining <= 10) {
+    } else if (token.daysRemaining <= reconnectWarningDays) {
       warnings.push(`LinkedIn authorization expires in ${token.daysRemaining} days. ${reconnect}`);
       await deps.notifyOperator({
         title: `LinkedIn authorization expires in ${token.daysRemaining} days`,

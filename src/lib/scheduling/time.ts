@@ -31,6 +31,12 @@ function formats(timeZone: string): Formats {
 
 export const dayMs = 24 * 60 * 60 * 1000;
 
+// Whole UTC days since the epoch: a counter that moves once a day, for rotating through
+// a list so consecutive runs pick different entries.
+export function dayIndex(date: Date) {
+  return Math.floor(date.getTime() / dayMs);
+}
+
 export function sleep(milliseconds: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 }

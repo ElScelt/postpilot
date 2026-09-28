@@ -9,6 +9,7 @@ import {
   scheduledPostTime,
   scheduleRequest,
 } from "../src/lib/scheduling/schedules";
+import { dayIndex } from "../src/lib/scheduling/time";
 
 const tallinn: Pick<Config, "timeZone" | "schedule"> = {
   timeZone: "Europe/Tallinn", schedule: { days: ["sun", "tue", "thu"], runHour: 21 },
@@ -158,4 +159,11 @@ test("a retry after midnight still targets the same morning", () => {
   // Monday 01:30 Tallinn still has seven hours to go; Monday 08:30 does not.
   assert.equal(scheduledPostTime(new Date("2026-09-06T22:30:00.000Z"), tallinnMorning).toISOString(), "2026-09-07T06:00:00.000Z");
   assert.equal(scheduledPostTime(new Date("2026-09-07T05:30:00.000Z"), tallinnMorning).toISOString(), "2026-09-08T06:00:00.000Z");
+});
+
+test("the day index moves at UTC midnight and nowhere else", () => {
+  const day = dayIndex(new Date("2026-09-28T00:00:00Z"));
+  assert.equal(dayIndex(new Date("2026-09-28T23:59:59.999Z")), day);
+  assert.equal(dayIndex(new Date("2026-09-29T00:00:00Z")), day + 1);
+  assert.equal(dayIndex(new Date(0)), 0);
 });
