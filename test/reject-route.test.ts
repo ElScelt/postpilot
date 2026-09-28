@@ -4,6 +4,7 @@ import { NextRequest } from "next/server";
 import { handleReject, handleReviewPage, type RejectDeps } from "../src/app/api/posts/reject/handler";
 import { cancelPost, listPosts, type QueuedPost } from "../src/lib/storage/posts";
 import { rejectToken } from "../src/lib/security/reject-token";
+import { memoryPostStore } from "./fakes";
 
 process.env.AUTOMATION_SECRET = "reject-secret";
 
@@ -16,16 +17,12 @@ function post(overrides: Partial<QueuedPost> = {}): QueuedPost {
 
 // The real post store over an in-memory value, so the handler runs the real cancel logic.
 function fakes(initial: QueuedPost[] = [post()]) {
-  const state = { value: initial as unknown };
-  const store = {
-    get: async <T,>() => state.value as T | null,
-    set: async (_key: string, value: unknown) => { state.value = value; return "OK"; },
-  };
+  const { store, read } = memoryPostStore(initial);
   const deps: RejectDeps = {
     listPosts: () => listPosts({ store }),
     cancelPost: (id) => cancelPost(id, { store }),
   };
-  return { deps, read: () => state.value as QueuedPost[] };
+  return { deps, read };
 }
 
 function reviewRequest(id: string, method: "GET" | "POST", token = rejectToken(id)) {

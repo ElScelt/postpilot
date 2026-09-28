@@ -1,4 +1,4 @@
-import { redis, type KeyValueStore } from "./redis";
+import { versionedStore, type VersionedStore } from "./redis";
 import { deliveryTimestamp, publishRetries, qstash, publishingUrl } from "../scheduling/qstash";
 import type { ResearchSource } from "../drafting/types";
 import { errorMessage } from "../errors";
@@ -26,9 +26,11 @@ export type QueuedPost = {
   automation?: AutomationMetadata;
 };
 
+export const postStatuses: QueuedPost["status"][] = ["queued", "posted", "cancelled", "failed"];
+
 // The two collaborators the store needs, injectable so tests run without Upstash.
 export type PostStoreDeps = {
-  store?: KeyValueStore;
+  store?: VersionedStore;
   publisher?: Pick<ReturnType<typeof qstash>, "publishJSON">;
 };
 
@@ -38,11 +40,13 @@ const queueKey = "postpilot:posts";
 // toward Upstash's request limit. LinkedIn itself is the archive of what went out.
 const retainedTerminalPosts = 200;
 
+function parsePosts(raw: string | null): QueuedPost[] {
+  return raw ? JSON.parse(raw) as QueuedPost[] : [];
+}
+
 export async function listPosts(deps: PostStoreDeps = {}): Promise<QueuedPost[]> {
-  const store = deps.store ?? redis();
-  return ((await store.get<QueuedPost[]>(queueKey)) ?? []).sort((a, b) =>
-    a.scheduledFor.localeCompare(b.scheduledFor),
-  );
+  const store = deps.store ?? versionedStore();
+  return parsePosts(await store.getRaw(queueKey)).sort((a, b) => a.scheduledFor.localeCompare(b.scheduledFor));
 }
 
 // QStash gives up on a delivery within about ninety minutes (four attempts bounded by
@@ -66,22 +70,36 @@ export function retainPosts(posts: QueuedPost[]) {
   return [...queued, ...terminal].sort((a, b) => a.scheduledFor.localeCompare(b.scheduledFor));
 }
 
-async function save(posts: QueuedPost[], deps: PostStoreDeps) {
-  const store = deps.store ?? redis();
-  await store.set(queueKey, retainPosts(posts));
+const maxWriteAttempts = 5;
+
+// Every change to the queue goes through here. The whole queue is one Redis value, so a
+// plain read-modify-write let concurrent writers undo each other: a dashboard edit could
+// put back a post that a Reject had just cancelled. The write lands only while the value
+// is still the one `change` saw; otherwise `change` runs again on a fresh read. It must
+// therefore only touch the array it is given, and throw to refuse.
+async function mutatePosts<T>(change: (posts: QueuedPost[]) => T, deps: PostStoreDeps): Promise<T> {
+  const store = deps.store ?? versionedStore();
+  for (let attempt = 0; attempt < maxWriteAttempts; attempt += 1) {
+    const raw = await store.getRaw(queueKey);
+    const posts = parsePosts(raw);
+    const result = change(posts);
+    if (await store.compareAndSet(queueKey, raw ?? "", JSON.stringify(retainPosts(posts)))) return result;
+  }
+  throw new Error("The post queue kept changing while this write was being made; try again.");
 }
 
 export async function addPost(text: string, scheduledFor: string, automation?: AutomationMetadata, deps: PostStoreDeps = {}) {
-  const posts = await listPosts(deps);
-  const day = scheduledFor.slice(0, 10);
-  if (posts.some((post) => post.status === "queued" && post.scheduledFor.slice(0, 10) === day)) {
-    throw new Error("A LinkedIn post is already queued for that UTC day.");
-  }
   const post: QueuedPost = {
     id: crypto.randomUUID(), text, scheduledFor, status: "queued", createdAt: new Date().toISOString(), automation,
   };
-  await save([...posts, post], deps);
-  return post;
+  const day = scheduledFor.slice(0, 10);
+  return mutatePosts((posts) => {
+    if (posts.some((existing) => existing.status === "queued" && existing.scheduledFor.slice(0, 10) === day)) {
+      throw new Error("A LinkedIn post is already queued for that UTC day.");
+    }
+    posts.push({ ...post });
+    return post;
+  }, deps);
 }
 
 export async function schedulePost(text: string, scheduledFor: string, automation?: AutomationMetadata, deps: PostStoreDeps = {}) {
@@ -100,12 +118,13 @@ export async function schedulePost(text: string, scheduledFor: string, automatio
       deduplicationId: post.id,
     });
     post.qstashMessageId = result.messageId;
-    await updatePost(post, deps);
+    // The owner may have rejected it already; the message id is worth keeping either way.
+    await transitionPost(post.id, postStatuses, { qstashMessageId: result.messageId }, deps);
     return post;
   } catch (error) {
     post.status = "failed";
     post.error = errorMessage(error);
-    await updatePost(post, deps);
+    await transitionPost(post.id, ["queued"], { status: "failed", error: post.error }, deps);
     throw error;
   }
 }
@@ -126,20 +145,28 @@ function queuedPost(posts: QueuedPost[], id: string) {
   return post;
 }
 
-export async function cancelPost(id: string, deps: PostStoreDeps = {}) {
-  const posts = await listPosts(deps);
-  const post = queuedPost(posts, id);
-  post.status = "cancelled";
-  await save(posts, deps);
-  return post;
+// Changes one post, but only while it is in one of the `from` states. Callers name the
+// fields they change instead of writing back a whole record read earlier, which would
+// undo whatever changed on it in between. A change that needed a queued post throws
+// PostNotQueuedError when the post is not queued.
+export async function transitionPost(
+  id: string,
+  from: QueuedPost["status"][],
+  patch: Partial<Omit<QueuedPost, "id">>,
+  deps: PostStoreDeps = {},
+) {
+  return mutatePosts((posts) => {
+    const post = posts.find((item) => item.id === id);
+    if (!post || !from.includes(post.status)) {
+      if (from.includes("queued")) throw new PostNotQueuedError(id, post?.status);
+      throw new Error(`Post ${id} is ${post?.status ?? "no longer stored"}, not ${from.join(" or ")}.`);
+    }
+    return Object.assign(post, patch);
+  }, deps);
 }
 
-export async function updatePost(updated: QueuedPost, deps: PostStoreDeps = {}) {
-  const posts = await listPosts(deps);
-  const index = posts.findIndex((post) => post.id === updated.id);
-  if (index === -1) throw new Error("Post no longer exists.");
-  posts[index] = updated;
-  await save(posts, deps);
+export async function cancelPost(id: string, deps: PostStoreDeps = {}) {
+  return transitionPost(id, ["queued"], { status: "cancelled" }, deps);
 }
 
 export const maxPostLength = 3000;
@@ -150,11 +177,11 @@ export async function editPostText(id: string, text: string, deps: PostStoreDeps
   const trimmed = text.trim();
   if (!trimmed) throw new Error("The post text cannot be empty.");
   if (trimmed.length > maxPostLength) throw new Error(`The post text exceeds ${maxPostLength} characters.`);
-  const posts = await listPosts(deps);
-  const post = queuedPost(posts, id);
-  post.originalText ??= post.text;
-  post.text = trimmed;
-  post.editedAt = new Date().toISOString();
-  await save(posts, deps);
-  return post;
+  return mutatePosts((posts) => {
+    const post = queuedPost(posts, id);
+    post.originalText ??= post.text;
+    post.text = trimmed;
+    post.editedAt = new Date().toISOString();
+    return post;
+  }, deps);
 }

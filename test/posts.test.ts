@@ -1,19 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { addPost, cancelPost, editPostText, PostNotQueuedError, retainPosts, schedulePost, updatePost, type QueuedPost } from "../src/lib/storage/posts";
+import { addPost, cancelPost, editPostText, PostNotQueuedError, retainPosts, schedulePost, transitionPost, type QueuedPost } from "../src/lib/storage/posts";
+import { memoryPostStore } from "./fakes";
 
 process.env.APP_URL = "https://example.vercel.app";
 
-function fakeStore(initial: QueuedPost[] = []) {
-  const state = { value: initial as unknown };
-  return {
-    store: {
-      get: async <T,>() => state.value as T | null,
-      set: async (_key: string, value: unknown) => { state.value = value; return "OK"; },
-    },
-    read: () => state.value as QueuedPost[],
-  };
-}
+const fakeStore = memoryPostStore;
 
 function post(overrides: Partial<QueuedPost>): QueuedPost {
   return {
@@ -61,9 +53,22 @@ test("refusing a post that is not queued says which state it is in", async () =>
     error instanceof PostNotQueuedError && error.status === undefined);
 });
 
-test("updating an unknown post fails loudly", async () => {
+test("changing an unknown post fails loudly", async () => {
   const { store } = fakeStore([]);
-  await assert.rejects(() => updatePost(post({ id: "ghost" }), { store }), /no longer exists/);
+  await assert.rejects(() => transitionPost("ghost", ["posted"], { error: "x" }, { store }), /no longer stored/);
+});
+
+test("a change is refused when the post has left the states it needs", async () => {
+  const { store, read } = fakeStore([post({ status: "cancelled" })]);
+  await assert.rejects(() => transitionPost("a", ["queued"], { status: "posted" }, { store }), PostNotQueuedError);
+  assert.equal(read()[0]!.status, "cancelled");
+});
+
+test("a write that keeps losing to other writers gives up without writing", async () => {
+  const shared = fakeStore([post({})]);
+  shared.alwaysConflict();
+  await assert.rejects(() => cancelPost("a", { store: shared.store }), /kept changing/);
+  assert.equal(shared.read()[0]!.status, "queued");
 });
 
 test("keeps every queued post and only the newest terminal ones", () => {
@@ -91,4 +96,14 @@ test("the owner can rewrite a queued post, and the original is kept", async () =
 test("a published post can no longer be edited", async () => {
   const { store } = fakeStore([post({ status: "posted" })]);
   await assert.rejects(() => editPostText("a", "too late", { store }), /No queued post/);
+});
+
+test("an edit and a Reject that land together both survive", async () => {
+  const shared = memoryPostStore([post({ id: "a" }), post({ id: "b", scheduledFor: "2026-09-08T06:00:00.000Z" })]);
+  // The Reject of b completes between the edit's read of the queue and its write.
+  shared.onNextWrite(async () => { await cancelPost("b", { store: shared.store }); });
+  await editPostText("a", "Edited.", { store: shared.store });
+  const [a, b] = shared.read();
+  assert.equal(a!.text, "Edited.");
+  assert.equal(b!.status, "cancelled", "the edit must not write back its stale copy of b");
 });

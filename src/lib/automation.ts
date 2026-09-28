@@ -1,6 +1,6 @@
 import { DraftRejectedError, draftingBudgetMs, generateGroundedDraft } from "./drafting/pipeline";
 import { scheduledPostTime } from "./scheduling/schedules";
-import { abandonedPosts, listPosts, schedulePost, updatePost, type QueuedPost } from "./storage/posts";
+import { abandonedPosts, listPosts, PostNotQueuedError, schedulePost, transitionPost, type QueuedPost } from "./storage/posts";
 import { recordAutomationRun } from "./storage/runs";
 import { reconcileAutomationSchedules } from "./scheduling/schedules";
 import { linkedInTokenStatus } from "./linkedin/api";
@@ -17,7 +17,7 @@ import { errorMessage } from "./errors";
 // orchestration with fakes. Production fills in the real modules.
 export type AutomationDeps = {
   listPosts: typeof listPosts;
-  updatePost: typeof updatePost;
+  transitionPost: typeof transitionPost;
   schedulePost: typeof schedulePost;
   linkedInTokenStatus: typeof linkedInTokenStatus;
   generateGroundedDraft: typeof generateGroundedDraft;
@@ -32,7 +32,7 @@ export type AutomationDeps = {
 
 function productionDeps(): AutomationDeps {
   return {
-    listPosts, updatePost, schedulePost, linkedInTokenStatus, generateGroundedDraft,
+    listPosts, transitionPost, schedulePost, linkedInTokenStatus, generateGroundedDraft,
     reconcileAutomationSchedules, notifyDraftQueued, notifyOperator, recordAutomationRun,
     acquireRunLock: (key, ttlSeconds) => acquireRunLock(key, ttlSeconds),
     releaseRunLock: (key, token) => releaseRunLock(key, token),
@@ -86,9 +86,14 @@ export async function runAutomation(
     // Retiring it must happen even when the run cannot proceed, because a dead
     // authorization is precisely what leaves posts stranded in the queue.
     for (const abandoned of abandonedPosts(posts, now)) {
-      abandoned.status = "failed";
       abandoned.error ??= "Post was never published before its scheduled time elapsed.";
-      await deps.updatePost(abandoned);
+      try {
+        await deps.transitionPost(abandoned.id, ["queued"], { status: "failed", error: abandoned.error });
+      } catch (error) {
+        // Published or rejected since the list was read: nothing is stranded after all.
+        if (error instanceof PostNotQueuedError) continue;
+        throw error;
+      }
       warnings.push(`Earlier post ${abandoned.id} never published: ${abandoned.error}`);
       await deps.notifyOperator({
         title: "A LinkedIn post never went out",

@@ -51,7 +51,11 @@ function fakes(options: Options = {}) {
   };
   const deps: AutomationDeps = {
     listPosts: async () => options.posts ?? [],
-    updatePost: async (updated) => { calls.updates.push(updated); },
+    transitionPost: async (id, _from, patch) => {
+      const updated = { ...post({ id }), ...patch } as QueuedPost;
+      calls.updates.push(updated);
+      return updated;
+    },
     schedulePost: async (text, scheduledFor, automation) => {
       calls.scheduled.push(text);
       return { id: "new", text, scheduledFor, status: "queued", createdAt: now.toISOString(), automation };

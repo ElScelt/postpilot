@@ -2,7 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { handlePublish, type PublishDeps } from "../src/app/api/cron/publish/handler";
 import { maxDuration } from "../src/app/api/cron/publish/route";
-import { listPosts, updatePost, type QueuedPost } from "../src/lib/storage/posts";
+import { listPosts, transitionPost, type QueuedPost } from "../src/lib/storage/posts";
+import { memoryPostStore } from "./fakes";
 import { publishTimeLimitSeconds } from "../src/lib/scheduling/qstash";
 import type { OperatorAlert } from "../src/lib/notify/ntfy";
 
@@ -17,20 +18,16 @@ function post(overrides: Partial<QueuedPost> = {}): QueuedPost {
 
 // The real post store over an in-memory value, and a LinkedIn that answers as told.
 function fakes(publish: () => Promise<string> = async () => "urn:li:share:1", initial: QueuedPost[] = [post()]) {
-  const state = { value: initial as unknown };
-  const store = {
-    get: async <T,>() => structuredClone(state.value) as T | null,
-    set: async (_key: string, value: unknown) => { state.value = structuredClone(value); return "OK"; },
-  };
+  const { store, read } = memoryPostStore(initial);
   const calls = { published: [] as string[], alerts: [] as OperatorAlert[] };
   const deps: PublishDeps = {
     listPosts: () => listPosts({ store }),
-    updatePost: (updated) => updatePost(updated, { store }),
+    transitionPost: (id, from, patch) => transitionPost(id, from, patch, { store }),
     publishTextPost: async (text) => { calls.published.push(text); return publish(); },
     notifyOperator: async (alert) => { calls.alerts.push(alert); return true; },
     verifySignature: async (request) => request.headers.get("upstash-signature") === "valid",
   };
-  return { deps, calls, read: () => state.value as QueuedPost[] };
+  return { deps, calls, read };
 }
 
 function delivery(postId = "p1", retried?: number, signature = "valid") {
@@ -102,7 +99,7 @@ test("an authorization failure links to the reconnect page", async () => {
 
 test("once LinkedIn has the post, a failed bookkeeping write still answers 2xx", async () => {
   const { deps } = fakes();
-  deps.updatePost = async () => { throw new Error("fetch failed"); };
+  deps.transitionPost = async () => { throw new Error("fetch failed"); };
   const response = await handlePublish(delivery(), deps);
   assert.equal(response.status, 200, "a 5xx would make QStash publish the text again");
   assert.deepEqual(await response.json(), { published: true, id: "p1", linkedinPostId: "urn:li:share:1", persisted: false });

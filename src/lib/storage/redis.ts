@@ -15,7 +15,9 @@ export function redisCredentials(env: Partial<Record<string, string>> = process.
   return url && token ? { url, token } : undefined;
 }
 
-export function redis() {
+// `automaticDeserialization: false` returns values as the exact strings Redis holds,
+// which a compare-and-set needs.
+export function redis(options: { automaticDeserialization?: boolean } = {}) {
   const { url, token } = redisCredentials() ?? {};
   if (!url || !token) {
     throw new Error("Missing Redis credentials. Connect Upstash or set its REST URL and token.");
@@ -26,5 +28,27 @@ export function redis() {
     url,
     token,
     signal: () => AbortSignal.timeout(10_000),
+    ...options,
   });
+}
+
+// A key read and written as the exact string Redis holds, so that a write can be made
+// conditional on nothing having changed since the read.
+export type VersionedStore = {
+  getRaw(key: string): Promise<string | null>;
+  // Writes `next` only while the key still holds `expected`; a missing key counts as "".
+  compareAndSet(key: string, expected: string, next: string): Promise<boolean>;
+};
+
+export const compareAndSetScript = `
+local current = redis.call('GET', KEYS[1]) or ''
+if current ~= ARGV[1] then return 0 end
+redis.call('SET', KEYS[1], ARGV[2])
+return 1`;
+
+export function versionedStore(client: Pick<Redis, "get" | "eval"> = redis({ automaticDeserialization: false })): VersionedStore {
+  return {
+    getRaw: (key) => client.get<string>(key),
+    compareAndSet: async (key, expected, next) => Number(await client.eval(compareAndSetScript, [key], [expected, next])) === 1,
+  };
 }

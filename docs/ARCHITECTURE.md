@@ -74,6 +74,7 @@ A draft that fails validation twice answers 500, so QStash retries with a fresh 
 ### 4. Review and publish
 
 - `src/lib/notify/ntfy.ts` sends the draft with a signed Reject link (`src/lib/security/reject-token.ts`).
+- `src/lib/storage/posts.ts` keeps every post in one JSON array under `postpilot:posts`. Every write reads the array, changes it and commits it with a compare-and-set script, and starts over if another writer got there first, so concurrent writers never undo each other.
 - `src/app/api/posts/reject/` shows the read-only review page (GET) and cancels the post (POST). A GET never cancels, so link prefetching can't kill a post.
 - `src/app/api/cron/publish/route.ts` receives the delayed QStash message. It checks the post is still queued and publishes through `src/lib/linkedin/api.ts`. If a version answers 426, the next LinkedIn API version is tried. Once LinkedIn accepts the post, the route answers 2xx even if bookkeeping fails, so a retry can never post twice.
 
