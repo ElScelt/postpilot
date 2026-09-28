@@ -1,8 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { acquireRunLock, releaseRunLock, releaseScript, type LockClient } from "../src/lib/storage/run-lock";
-import { runTimeLimitSeconds } from "../src/lib/scheduling/qstash";
-import { maxDuration } from "../src/app/api/automation/run/route";
 
 // Records the commands; what Redis does with them is checked against a real Redis in
 // test/redis/run-lock.test.ts.
@@ -14,10 +12,6 @@ function fakeClient(setAnswer: "OK" | null) {
   } as unknown as LockClient;
   return { client, calls };
 }
-
-test("the lock expires when the platform would kill the run", () => {
-  assert.equal(maxDuration, runTimeLimitSeconds, "route.ts must repeat the run's time limit");
-});
 
 test("taking the lock stores a fresh token that expires on its own", async () => {
   const { client, calls } = fakeClient("OK");

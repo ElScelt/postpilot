@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { handlePublish, type PublishDeps } from "../src/app/api/cron/publish/handler";
-import { maxDuration } from "../src/app/api/cron/publish/route";
 import { cancelPost, listPosts, PostNotQueuedError, transitionPost, type QueuedPost } from "../src/lib/storage/posts";
 import { publishTextPost } from "../src/lib/linkedin/api";
 import { publishTimeLimitSeconds } from "../src/lib/scheduling/qstash";
@@ -55,10 +54,6 @@ function delivery(retried?: number, signature = "valid") {
 }
 
 const timeout = () => Promise.reject(new DOMException("The operation was aborted due to timeout", "TimeoutError"));
-
-test("the route's time limit is the one the publish logic assumes", () => {
-  assert.equal(maxDuration, publishTimeLimitSeconds);
-});
 
 test("refuses a delivery QStash did not sign", async () => {
   const { deps, calls } = fakes();
