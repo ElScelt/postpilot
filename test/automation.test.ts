@@ -2,7 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { recentActivity, runAutomation, type AutomationDeps } from "../src/lib/automation";
 import type { AutomationRun } from "../src/lib/storage/runs";
-import { DraftRejectedError, type DraftOutcome } from "../src/lib/drafting/pipeline";
+import { DraftRejectedError, draftingBudgetMs, type DraftOutcome } from "../src/lib/drafting/pipeline";
+import { runTimeLimitSeconds } from "../src/lib/scheduling/qstash";
 import type { RecentActivity } from "../src/lib/drafting/prompt";
 import type { TokenStatus } from "../src/lib/linkedin/api";
 import type { QueuedPost } from "../src/lib/storage/posts";
@@ -160,6 +161,18 @@ test("a run killed while holding the lock does not block QStash's first retry", 
   clock += 300_000 + 12_000;
   const retry = await runAutomation(new Date(clock), deps);
   assert.equal(retry.status, "scheduled");
+});
+
+test("drafting ends in time for the run to queue the post before the route's limit", async () => {
+  const { deps } = fakes();
+  let deadline: number | undefined;
+  deps.generateGroundedDraft = async (_recent, _now, _fetcher, options) => {
+    deadline = options?.deadline;
+    return scheduledOutcome;
+  };
+  await runAutomation(now, deps);
+  assert.equal(deadline, now.getTime() + draftingBudgetMs);
+  assert.ok(draftingBudgetMs < runTimeLimitSeconds * 1000);
 });
 
 test("records a rejected draft with its attempts, alerts on the final attempt, and rethrows", async () => {

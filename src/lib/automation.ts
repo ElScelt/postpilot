@@ -1,4 +1,4 @@
-import { DraftRejectedError, generateGroundedDraft } from "./drafting/pipeline";
+import { DraftRejectedError, draftingBudgetMs, generateGroundedDraft } from "./drafting/pipeline";
 import { scheduledPostTime } from "./scheduling/schedules";
 import { abandonedPosts, listPosts, schedulePost, updatePost, type QueuedPost } from "./storage/posts";
 import { recordAutomationRun } from "./storage/runs";
@@ -155,7 +155,9 @@ export async function runAutomation(
     const recent = recentActivity(posts, now);
     let outcome;
     try {
-      outcome = await deps.generateGroundedDraft(recent, now);
+      // The budget runs from the start of the run, not from here: the sweep, the schedule
+      // and the token checks have already spent some of the route's time.
+      outcome = await deps.generateGroundedDraft(recent, now, undefined, { deadline: now.getTime() + draftingBudgetMs });
     } catch (error) {
       if (!(error instanceof DraftRejectedError)) throw error;
       // Recorded here so the rejected drafts survive; the route still answers 500 so

@@ -356,3 +356,13 @@ test("a review that drops an unrelated source keeps the story when a first-party
   assert.equal(outcome.decision.shouldPost, true);
   assert.deepEqual(outcome.decision.shouldPost && outcome.decision.sources.map((source) => source.url), [primary.url]);
 });
+
+test("a search that hangs is cut off at the run's deadline", { timeout: 5_000 }, async () => {
+  // Answers only when the request is aborted, as a hung connection would.
+  const hanging: typeof fetch = (_input, init) => new Promise((_resolve, reject) => {
+    init?.signal?.addEventListener("abort", () => reject(init.signal!.reason));
+  });
+  const started = Date.now();
+  await assert.rejects(() => generateGroundedDraft(noRecent, now, hanging, { deadline: Date.now() + 100 }));
+  assert.ok(Date.now() - started < 2_000, "the deadline, not the per-call timeout, ended the search");
+});

@@ -8,6 +8,8 @@ import { searchThemeEvidence, type ResearchResult } from "../research/tavily";
 import { focusEvidence, meetsEvidenceBar } from "../research/sources";
 import { themeOrder, type PostTheme } from "../research/themes";
 import { errorMessage } from "../errors";
+import { runTimeLimitSeconds } from "../scheduling/qstash";
+import { sleep } from "../scheduling/time";
 
 export type DraftAttempt = { text: string; reason: string };
 
@@ -45,8 +47,22 @@ export type DraftOptions = {
 
 const maxAttempts = 2;
 const defaultMaxThemesDrafted = 3;
-const defaultBudgetMs = 240_000;
 const minimumThemeMs = 75_000;
+
+// Drafting gets the run route's time limit less what the run still does afterwards:
+// storing and scheduling the post, then up to three ten-second ntfy attempts with their
+// waits. Past this deadline the platform would kill the run before it recorded anything.
+const finishReserveMs = 45_000;
+export const draftingBudgetMs = runTimeLimitSeconds * 1000 - finishReserveMs;
+
+// Every Tavily and Groq request also ends at the deadline, whatever its own timeout, so
+// one slow answer cannot carry the run past it.
+function withDeadline(fetcher: typeof fetch, deadline: number): typeof fetch {
+  return (input, init) => {
+    const remaining = AbortSignal.timeout(Math.max(0, deadline - Date.now()));
+    return fetcher(input, { ...init, signal: init?.signal ? AbortSignal.any([init.signal, remaining]) : remaining });
+  };
+}
 
 // Search the least recently used theme first. A theme is skipped when its evidence
 // cannot clear the bar, when the model declines it as not worth a post, or when two
@@ -60,7 +76,8 @@ export async function generateGroundedDraft(
   fetcher: typeof fetch = fetch,
   options: DraftOptions = {},
 ): Promise<DraftOutcome> {
-  const deadline = options.deadline ?? Date.now() + defaultBudgetMs;
+  const deadline = options.deadline ?? Date.now() + draftingBudgetMs;
+  const bounded = withDeadline(fetcher, deadline);
   const maxThemes = options.maxThemesDrafted ?? defaultMaxThemesDrafted;
   const themesTried: PostTheme[] = [];
   const evidenceHosts: Record<string, string[]> = {};
@@ -73,14 +90,14 @@ export async function generateGroundedDraft(
   for (const theme of themeOrder(recent.themes, now)) {
     if (drafted > 0 && (drafted >= maxThemes || Date.now() > deadline - minimumThemeMs)) break;
     themesTried.push(theme);
-    const results = await searchThemeEvidence(theme, now, fetcher);
+    const results = await searchThemeEvidence(theme, now, bounded);
     evidenceHosts[theme] = [...new Set(results.map((result) => new URL(result.url).hostname))];
     if (!results.length) continue;
     lastTheme = theme;
     // If the whole evidence set cannot clear the bar, no draft drawn from it can either.
     if (!meetsEvidenceBar(results.map((result) => result.url))) continue;
     drafted += 1;
-    const outcome = await draftFromTheme(recent, results, theme, now, fetcher, attempts, notes);
+    const outcome = await draftFromTheme(recent, results, theme, now, bounded, deadline, attempts, notes);
     if (outcome.decision.shouldPost) return { decision: outcome.decision, theme, themesTried, evidenceHosts, attempts, notes };
     if (outcome.rejected) rejected = outcome.rejected;
     else declined.push(`${theme}: ${outcome.decision.reason}`);
@@ -101,6 +118,7 @@ async function draftFromTheme(
   theme: PostTheme,
   now: Date,
   fetcher: typeof fetch,
+  deadline: number,
   attempts: DraftAttempt[],
   notes: string[],
 ): Promise<{ decision: DraftDecision; rejected?: DraftRejectedError }> {
@@ -120,7 +138,7 @@ async function draftFromTheme(
     let text: string;
     try {
       text = await completeGroq(
-        buildDraftRequest({ recent, results: focused, now, theme, feedback, failedDraft, compact, reasoning }), "draft", fetcher,
+        buildDraftRequest({ recent, results: focused, now, theme, feedback, failedDraft, compact, reasoning }), "draft", fetcher, sleep, deadline,
       );
     } catch (error) {
       const repaired = repairedAnswer(error);
@@ -167,7 +185,7 @@ async function draftFromTheme(
     // The model may relabel the post; the rotation needs the theme actually researched.
     const draft = { ...decision, theme };
     const violations = draftViolations(draft, now, context);
-    if (!violations.length) return { decision: await reviewDraft(draft, focused, now, fetcher, context, notes) };
+    if (!violations.length) return { decision: await reviewDraft(draft, focused, now, fetcher, deadline, context, notes) };
     feedback = violations.join(" ");
     failedDraft = draft.text;
     attempts.push({ text: draft.text, reason: feedback });
@@ -192,16 +210,16 @@ function repairedAnswer(error: unknown) {
 // Like the draft, an empty or malformed strict-JSON review is usually the reasoning
 // spending the whole completion budget, so it is asked once more with low effort. A
 // review that only nested its paragraphs is unwrapped instead.
-async function requestReview(draft: PostedDecision, results: ResearchResult[], now: Date, fetcher: typeof fetch) {
+async function requestReview(draft: PostedDecision, results: ResearchResult[], now: Date, fetcher: typeof fetch, deadline: number) {
   try {
-    return await completeGroq(buildReviewRequest(draft, results, now), "review", fetcher);
+    return await completeGroq(buildReviewRequest(draft, results, now), "review", fetcher, sleep, deadline);
   } catch (error) {
     if (!(error instanceof GroqInvalidJsonError)) throw error;
     const repaired = repairedAnswer(error);
     if (repaired !== undefined) return repaired;
   }
   try {
-    return await completeGroq(buildReviewRequest(draft, results, now, "low"), "review", fetcher);
+    return await completeGroq(buildReviewRequest(draft, results, now, "low"), "review", fetcher, sleep, deadline);
   } catch (error) {
     const repaired = repairedAnswer(error);
     if (repaired === undefined) throw error;
@@ -218,12 +236,13 @@ async function reviewDraft(
   results: ResearchResult[],
   now: Date,
   fetcher: typeof fetch,
+  deadline: number,
   context: DraftContext,
   notes: string[],
 ): Promise<DraftDecision> {
   let text: string;
   try {
-    text = await requestReview(draft, results, now, fetcher);
+    text = await requestReview(draft, results, now, fetcher, deadline);
   } catch (error) {
     notes.push(`Review pass skipped: ${errorMessage(error)}`);
     return draft;

@@ -334,3 +334,17 @@ test("every Groq request, retries included, can be abandoned when Groq hangs", a
   assert.equal(signals.length, 2);
   assert.ok(signals.every((signal) => signal instanceof AbortSignal));
 });
+
+test("never waits out a rate limit past the run's deadline", async () => {
+  const waits: number[] = [];
+  await assert.rejects(
+    () => requestGroq(
+      {},
+      async () => new Response("rate limited", { status: 429, headers: { "Retry-After": "20" } }),
+      async (milliseconds: number) => { waits.push(milliseconds); },
+      Date.now() + 5_000,
+    ),
+    /Out of time/,
+  );
+  assert.deepEqual(waits, [], "the wait would have passed the deadline, so it never started");
+});

@@ -91,10 +91,13 @@ export class GroqRateLimitError extends Error {
   }
 }
 
+// A wait for the rate limit that would end after `deadline` is not started: the platform
+// would kill the run mid-sleep, and the run would end without recording why.
 export async function requestGroq(
   init: RequestInit,
   fetcher: typeof fetch = fetch,
   wait: (milliseconds: number) => Promise<void> = sleep,
+  deadline = Infinity,
 ) {
   const send = () => fetcher(groqEndpoint, { ...init, signal: AbortSignal.timeout(requestTimeoutMs) });
   let response = await send();
@@ -107,7 +110,11 @@ export async function requestGroq(
       );
     }
     const suggested = retryAfter !== undefined && retryAfter > 0 ? Math.min(retryAfter * 1000, 30_000) : 10_000;
-    await wait(Math.max(suggested, minimumRetryWaitsMs[retry]!));
+    const delay = Math.max(suggested, minimumRetryWaitsMs[retry]!);
+    if (Date.now() + delay > deadline) {
+      throw new Error(`Out of time for this run: Groq's rate limit asked for a ${Math.round(delay / 1000)}-second wait.`);
+    }
+    await wait(delay);
     response = await send();
   }
   return response;
@@ -121,8 +128,9 @@ export async function completeGroq(
   label: string,
   fetcher: typeof fetch = fetch,
   wait: (milliseconds: number) => Promise<void> = sleep,
+  deadline = Infinity,
 ) {
-  const response = await requestGroq(init, fetcher, wait);
+  const response = await requestGroq(init, fetcher, wait, deadline);
   if (response.status === 413) {
     throw new Error(`Groq refused the ${label} request as too large for the model's per-minute token limit: ${await response.text()}`);
   }
