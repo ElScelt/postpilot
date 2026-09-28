@@ -20,13 +20,16 @@ export async function GET(request: NextRequest) {
     client_id: required("LINKEDIN_CLIENT_ID"),
     client_secret: required("LINKEDIN_CLIENT_SECRET"),
   });
+  // The owner is waiting on this page; a hung LinkedIn call should fail, not spin.
   const tokenResponse = await fetch("https://www.linkedin.com/oauth/v2/accessToken", {
     method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body,
+    signal: AbortSignal.timeout(15_000),
   });
   if (!tokenResponse.ok) return new NextResponse(`Token exchange failed: ${await tokenResponse.text()}`, { status: 502 });
   const token = tokenSchema.parse(await tokenResponse.json());
   const profileResponse = await fetch("https://api.linkedin.com/v2/userinfo", {
     headers: { Authorization: `Bearer ${token.access_token}` },
+    signal: AbortSignal.timeout(15_000),
   });
   if (!profileResponse.ok) return new NextResponse(`Profile lookup failed: ${await profileResponse.text()}`, { status: 502 });
   const profile = profileSchema.parse(await profileResponse.json());

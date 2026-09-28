@@ -35,6 +35,9 @@ export function ntfyRequest(message: NtfyMessage) {
 }
 
 const retryDelaysMs = [1000, 3000];
+// ntfy answers in well under a second; a request still hanging after this is retried
+// rather than left to eat the run's time budget.
+const requestTimeoutMs = 10_000;
 
 // A notification failure must never cost the post that was already scheduled, so this
 // never throws. It does retry on the transient statuses, because losing the overnight
@@ -47,7 +50,7 @@ export async function sendNtfy(
   const { url, init } = ntfyRequest(message);
   for (let attempt = 0; ; attempt += 1) {
     try {
-      const response = await fetcher(url, init);
+      const response = await fetcher(url, { ...init, signal: AbortSignal.timeout(requestTimeoutMs) });
       if (response.ok) return true;
       if (attempt >= retryDelaysMs.length || (response.status < 500 && response.status !== 429)) {
         console.error(`Unable to send ntfy notification "${message.title}": ntfy responded ${response.status}`);

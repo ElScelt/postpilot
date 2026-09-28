@@ -103,3 +103,9 @@ test("a self-hosted server and an access token are honoured when configured", (t
   assert.equal(url, "https://ntfy.example.com/secret-topic");
   assert.equal((init.headers as Record<string, string>).Authorization, "Bearer tk_abc");
 });
+
+test("a hung ntfy request is abandoned rather than holding the run", async () => {
+  let signal: AbortSignal | null | undefined;
+  await sendNtfy({ topic: "t", title: "x", body: "y" }, async (_input, init) => { signal = init?.signal; return new Response("ok"); });
+  assert.ok(signal instanceof AbortSignal);
+});

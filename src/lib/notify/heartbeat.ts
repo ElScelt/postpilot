@@ -12,7 +12,7 @@ export async function pingHeartbeat(
   if (!url) return false;
   const target = ok ? url : `${url.replace(/\/$/, "")}/fail`;
   try {
-    const response = await fetcher(target, { method: "GET" });
+    const response = await fetcher(target, { method: "GET", signal: AbortSignal.timeout(10_000) });
     return response.ok;
   } catch (error) {
     console.error("Heartbeat ping failed:", errorMessage(error));

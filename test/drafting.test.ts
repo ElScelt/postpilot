@@ -322,3 +322,15 @@ test("the hard rules follow the configured persona and limits", () => {
   assert.doesNotMatch(custom, /Never write any of:/);
   assert.match(hardRules(), /Keep the hook under 18 words \(about 120 characters\)/);
 });
+
+test("every Groq request, retries included, can be abandoned when Groq hangs", async () => {
+  const signals: unknown[] = [];
+  let calls = 0;
+  await requestGroq({ method: "POST" }, async (_input, init) => {
+    signals.push(init?.signal);
+    calls += 1;
+    return calls === 1 ? new Response("slow down", { status: 429, headers: { "retry-after": "1" } }) : new Response("{}");
+  }, async () => {});
+  assert.equal(signals.length, 2);
+  assert.ok(signals.every((signal) => signal instanceof AbortSignal));
+});

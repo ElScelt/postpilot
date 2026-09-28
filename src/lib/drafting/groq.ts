@@ -60,6 +60,10 @@ const maxRetryWaitMs = 60_000;
 // wait longer, about a minute in all, by when the draft's tokens have left the window.
 const minimumRetryWaitsMs = [0, 20_000, 40_000];
 
+// gpt-oss-120b on Groq answers a draft in seconds. A request that hangs for a minute is
+// not going to finish inside the run.
+const requestTimeoutMs = 60_000;
+
 // Strict JSON mode validates the answer server-side and answers 400 json_validate_failed
 // when it does not fit the schema. An empty failed_generation means the model emitted no
 // answer at all, which is what reasoning spending the whole completion budget looks like.
@@ -92,7 +96,8 @@ export async function requestGroq(
   fetcher: typeof fetch = fetch,
   wait: (milliseconds: number) => Promise<void> = sleep,
 ) {
-  let response = await fetcher(groqEndpoint, init);
+  const send = () => fetcher(groqEndpoint, { ...init, signal: AbortSignal.timeout(requestTimeoutMs) });
+  let response = await send();
   for (let retry = 0; response.status === 429 && retry < minimumRetryWaitsMs.length; retry += 1) {
     const retryAfter = retryAfterSeconds(response);
     if (retryAfter !== undefined && retryAfter * 1000 > maxRetryWaitMs) {
@@ -103,7 +108,7 @@ export async function requestGroq(
     }
     const suggested = retryAfter !== undefined && retryAfter > 0 ? Math.min(retryAfter * 1000, 30_000) : 10_000;
     await wait(Math.max(suggested, minimumRetryWaitsMs[retry]!));
-    response = await fetcher(groqEndpoint, init);
+    response = await send();
   }
   return response;
 }

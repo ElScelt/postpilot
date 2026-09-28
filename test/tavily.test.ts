@@ -135,3 +135,12 @@ test("asks the general index for the allowlisted domains when the news index has
     ["news:allowlist", "news:allowlist", "general:allowlist", "general:allowlist"]);
   assert.deepEqual(results.map((entry) => entry.url).sort(), ["https://aimultiple.com/round-up", "https://nextjs.org/blog/next-16-3"]);
 });
+
+test("every search can be abandoned when Tavily hangs", async () => {
+  const signals: unknown[] = [];
+  await searchThemeEvidence("frontend", new Date("2026-07-14T12:00:00Z"), async (_input, init) => {
+    signals.push(init?.signal);
+    return Response.json({ results: [] });
+  });
+  assert.ok(signals.length > 0 && signals.every((signal) => signal instanceof AbortSignal));
+});

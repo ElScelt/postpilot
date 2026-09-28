@@ -24,6 +24,10 @@ const responseSchema = z.object({
 
 type SearchPass = { includeDomains: string[]; topic: "news" | "general" };
 
+// An advanced search takes a few seconds. One that hangs is failed like any other pass,
+// so the next pass or theme still gets its share of the run's time.
+const searchTimeoutMs = 30_000;
+
 // Passes escalate from the strictest to the widest and stop as soon as the merged results
 // clear the evidence bar. Tavily's news index is built from news publishers and rarely
 // carries a vendor's own release notes, so the second pass asks the general index for
@@ -88,6 +92,7 @@ async function runSearch(
   const window = recentDays(now, config().limits.sourceWindowDays);
   const response = await fetcher("https://api.tavily.com/search", {
     method: "POST",
+    signal: AbortSignal.timeout(searchTimeoutMs),
     headers: {
       "Authorization": `Bearer ${required("TAVILY_API_KEY")}`,
       "Content-Type": "application/json",

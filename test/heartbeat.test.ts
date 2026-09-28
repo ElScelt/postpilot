@@ -14,3 +14,9 @@ test("is a no-op without a URL and never throws", async () => {
   assert.equal(await pingHeartbeat(true, undefined, async () => { throw new Error("must not be called"); }), false);
   assert.equal(await pingHeartbeat(true, "https://hc-ping.com/abc", async () => { throw new Error("offline"); }), false);
 });
+
+test("a hung ping is abandoned rather than holding the run", async () => {
+  let signal: AbortSignal | null | undefined;
+  await pingHeartbeat(true, "https://hc-ping.com/abc", async (_input, init) => { signal = init?.signal; return new Response("OK"); });
+  assert.ok(signal instanceof AbortSignal);
+});
