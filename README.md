@@ -227,6 +227,14 @@ The validator enforces these rules instead of trusting the prompt to follow them
 
 postpilot keeps everything in Redis under the `postpilot:` prefix: `postpilot:token`, `postpilot:posts`, `postpilot:runs` and a short-lived `postpilot:run-lock:<date>`. The QStash schedule id is `postpilot-run`. Give each deployment its own Redis database and QStash instance.
 
+Every read of these keys is checked against the shape this version expects. Fields it doesn't know are kept. A queue holding a post it cannot read stops with an error before anything is written, and a run record it cannot read is left off the dashboard but kept. Before deploying a new version over existing data, run the read-only check with the database's read-only token (the Upstash console shows it, and the Vercel integration adds it as `KV_REST_API_READ_ONLY_TOKEN`):
+
+```bash
+UPSTASH_REDIS_REST_URL=https://... UPSTASH_REDIS_REST_TOKEN=<read-only token> npm run check:data
+```
+
+It reports each key's statuses, the fields it keeps without reading, and anything it cannot read. It never prints a post's text or the token.
+
 ## FAQ
 
 **Is automated posting allowed by LinkedIn?**
@@ -267,6 +275,7 @@ On the dashboard's run history: every rejected draft is listed next to the rule 
 | "LinkedIn published the post, but its record was not updated" | LinkedIn has the post, but Redis could not record it. | Nothing: the post went out. The alert names its LinkedIn id. |
 | "Reject failed, try again" | Redis could not be reached, so the post is still queued. | Tap **Try again**. If it keeps failing, check Upstash's status and reject from the dashboard once it is back. |
 | "The run could not start" | Every QStash delivery found another run for the same morning holding the lock. | Check the dashboard for tonight's post; if there is none, press **Run now**. |
+| "postpilot:posts holds a post this version cannot read" | The queue holds a record this version doesn't understand, for example one written by a newer version. Nothing was changed. | Run `npm run check:data` to see which field, then deploy the version that wrote it. |
 | Silence on a run night | The run never fired, or ntfy is down. | healthchecks.io pages you if configured. Otherwise check the QStash console and the Vercel function logs. |
 
 ## Contributing and security

@@ -74,7 +74,7 @@ A draft that fails validation twice answers 500, so QStash retries with a fresh 
 ### 4. Review and publish
 
 - `src/lib/notify/ntfy.ts` sends the draft with a signed Reject link (`src/lib/security/reject-token.ts`).
-- `src/lib/storage/posts.ts` keeps every post in one JSON array under `postpilot:posts`. Every write reads the array, changes it and commits it with a compare-and-set script, and starts over if another writer got there first, so concurrent writers never undo each other.
+- `src/lib/storage/posts.ts` keeps every post in one JSON array under `postpilot:posts`. Every write reads the array, changes it and commits it with a compare-and-set script, and starts over if another writer got there first, so concurrent writers never undo each other. The array is checked against `postSchema` on every read. It is loose, so fields an older or newer version wrote survive a write, and a post it cannot read stops the read before anything is written. The run history (`runs.ts`) and the token (`linkedin/api.ts`) are checked the same way, except that a run record this version cannot read is left out of the list but kept in the store.
 - `src/app/api/posts/reject/` shows the read-only review page (GET) and cancels the post (POST). A GET never cancels, so link prefetching can't kill a post.
 - `src/app/api/cron/publish/` receives the delayed QStash message. It claims the post (`queued` → `publishing`) before calling LinkedIn through `src/lib/linkedin/api.ts`, so a Reject or an edit that arrives mid-call is refused rather than silently lost. If a version answers 426, the next LinkedIn API version is tried. What happens next depends on whether LinkedIn can have the post:
   - **accepted:** the post is marked `posted`. The route answers 2xx even if that write fails twice, so a retry can never post twice; the alert then names the LinkedIn post id.
@@ -90,6 +90,8 @@ postpilot.config.ts          what gets posted and when (validated by src/lib/con
 scripts/
   draft.ts                   npm run draft: one draft locally, no Redis, no notifications
   offline.ts                 canned Tavily and Groq answers for --offline
+  check-data.ts              npm run check:data: can this version read a deployment's Redis?
+  stored-data.ts             the check itself, tested without Redis
 src/
   proxy.ts                   Basic auth in front of /dashboard
   app/

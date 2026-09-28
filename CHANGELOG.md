@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- `npm run check:data` checks, read-only, whether this version can read a deployment's post queue, run history and LinkedIn authorization.
+
 ### Changed
 
 - CI fails when test coverage drops below a floor, and the dashboard proxy, the LinkedIn connect and callback routes and every route file's exports have tests.
@@ -12,6 +16,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Fixed
 
+- Posts, runs and the LinkedIn authorization are checked as they are read from Redis. A queue holding a post this version cannot read stops with an error that names the field, instead of failing in some later step or being rewritten without it.
 - An environment variable left blank counts as unset, and whitespace around a value is ignored. A blank `NTFY_URL` used to send alerts to a relative URL, and a blank `GROQ_MODEL` stopped every run.
 - The review page shows a failure page with the Reject button when it cannot load the draft, instead of a blank error.
 - The evening sweep retires a post that a killed delivery left mid-publish, with an alert to check LinkedIn, instead of leaving it stuck. It is never retried.

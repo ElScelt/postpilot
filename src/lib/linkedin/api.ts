@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { redis, type KeyValueStore } from "../storage/redis";
 import { errorMessage } from "../errors";
 import { dayMs } from "../scheduling/time";
@@ -5,6 +6,10 @@ import { dayMs } from "../scheduling/time";
 type TokenReader = Pick<KeyValueStore, "get">;
 
 export type TokenRecord = { accessToken: string; memberId: string; expiresAt: number; connectedAt?: number };
+
+export const tokenSchema = z.looseObject({
+  accessToken: z.string(), memberId: z.string(), expiresAt: z.number(), connectedAt: z.number().optional(),
+}) satisfies z.ZodType<TokenRecord>;
 
 export type TokenStatus =
   | { state: "missing" }
@@ -45,8 +50,16 @@ export async function linkedInFetch(
   return response!;
 }
 
-export async function loadLinkedInToken(client: TokenReader = redis()) {
-  return client.get<TokenRecord>(tokenKey);
+export async function loadLinkedInToken(client: TokenReader = redis()): Promise<TokenRecord | null> {
+  const stored = await client.get<unknown>(tokenKey);
+  if (stored === null) return null;
+  const result = tokenSchema.safeParse(stored);
+  // The callback reads the stored member to decide who may reconnect, so with
+  // LINKEDIN_MEMBER_ID set it skips this read and the new token replaces the old one.
+  if (!result.success) {
+    throw new Error(`${tokenKey} holds an authorization this version cannot read. Set LINKEDIN_MEMBER_ID and reconnect LinkedIn to replace it.`);
+  }
+  return result.data;
 }
 
 // LinkedIn's limit on the text of a post.

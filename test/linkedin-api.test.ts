@@ -119,3 +119,8 @@ test("the publish call gives up before the publish route is killed", async () =>
   await publishTextPost("text", async (_input, init) => { signal = init?.signal; return new Response("", { status: 201 }); }, store(Date.now() + day));
   assert.ok(signal instanceof AbortSignal);
 });
+
+test("an authorization this version cannot read says how to replace it", async () => {
+  const unreadable = { get: async <T,>() => ({ accessToken: "x", memberId: "y", expiresAt: "soon" }) as T };
+  await assert.rejects(() => linkedInTokenStatus(now, unreadable), /cannot read[\s\S]*reconnect LinkedIn/);
+});

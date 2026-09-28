@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { addPost, cancelPost, editPostText, PostNotQueuedError, retainPosts, schedulePost, transitionPost, type QueuedPost } from "../src/lib/storage/posts";
+import { addPost, cancelPost, editPostText, listPosts, PostNotQueuedError, retainPosts, schedulePost, transitionPost, type QueuedPost } from "../src/lib/storage/posts";
 import { memoryPostStore } from "./fakes";
 
 process.env.APP_URL = "https://example.vercel.app";
@@ -114,4 +114,26 @@ test("a post on its way to LinkedIn is kept and blocks a second post for its day
   assert.ok(retainPosts([...terminal, publishing]).some((entry) => entry.id === "p"));
   const { store } = fakeStore([post({ status: "publishing" })]);
   await assert.rejects(() => addPost("again", "2026-09-07T08:00:00.000Z", undefined, { store }), /already queued/);
+});
+
+test("a queue holding a post this version cannot read is refused before anything is written", async () => {
+  const { store, read } = fakeStore([post({ id: "a" }), post({ id: "b", status: "archived" as QueuedPost["status"] })]);
+  const before = JSON.stringify(read());
+  await assert.rejects(() => listPosts({ store }), /postpilot:posts holds a post this version cannot read[\s\S]*status/);
+  await assert.rejects(() => cancelPost("a", { store }), /cannot read/);
+  assert.equal(JSON.stringify(read()), before, "a write would have dropped or rewritten the unreadable post");
+});
+
+test("fields this version does not know survive a change to the post", async () => {
+  const legacy = { ...post({ id: "a" }), legacyField: { kept: true } };
+  const { store, read } = fakeStore([legacy as QueuedPost]);
+  await editPostText("a", "Edited.", { store });
+  assert.deepEqual((read()[0] as unknown as typeof legacy).legacyField, { kept: true });
+});
+
+test("a post drafted before themes, sources or automation existed is read as it is", async () => {
+  const bare = post({ id: "a" });
+  const themeless = post({ id: "b", scheduledFor: "2026-09-08T06:00:00.000Z", automation: { topic: "Agents", sources: [] } });
+  const { store } = fakeStore([bare, themeless]);
+  assert.deepEqual(await listPosts({ store }), [bare, themeless]);
 });

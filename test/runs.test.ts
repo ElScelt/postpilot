@@ -55,3 +55,11 @@ test("reports an empty history when nothing has been recorded", async () => {
   const { store } = fakeStore();
   assert.deepEqual(await listAutomationRuns(store), []);
 });
+
+test("a run entry this version cannot read is left out of the list but kept in the store", async () => {
+  const legacy = { ranAt: "2026-07-20T05:00:00.000Z", status: "archived" };
+  const { store, read } = fakeStore([legacy as unknown as AutomationRun, run]);
+  assert.deepEqual(await listAutomationRuns(store), [run]);
+  await recordAutomationRun(run, store);
+  assert.deepEqual(read()?.[0], legacy, "recording a run must not rewrite the history it cannot read");
+});

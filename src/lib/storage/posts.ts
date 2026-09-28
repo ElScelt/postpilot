@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { versionedStore, type VersionedStore } from "./redis";
 import { deliveryTimestamp, publishRetries, publishTimeLimitSeconds, qstash, publishingUrl } from "../scheduling/qstash";
 import type { ResearchSource } from "../drafting/types";
@@ -31,7 +32,29 @@ export type QueuedPost = {
   automation?: AutomationMetadata;
 };
 
-export const postStatuses: QueuedPost["status"][] = ["queued", "publishing", "posted", "cancelled", "failed"];
+export const postStatuses = ["queued", "publishing", "posted", "cancelled", "failed"] as const satisfies QueuedPost["status"][];
+
+const sourceSchema = z.looseObject({
+  title: z.string(), url: z.string(), publishedDate: z.string(), primary: z.boolean(), credible: z.boolean().optional(),
+});
+
+// What a stored post must hold for this version to handle it. Loose, so a field it does
+// not know, from an older or a newer postpilot, is kept through every change to the post.
+export const postSchema = z.looseObject({
+  id: z.string(),
+  text: z.string(),
+  scheduledFor: z.string(),
+  status: z.enum(postStatuses),
+  createdAt: z.string(),
+  claimedAt: z.string().optional(),
+  postedAt: z.string().optional(),
+  originalText: z.string().optional(),
+  editedAt: z.string().optional(),
+  linkedinPostId: z.string().optional(),
+  qstashMessageId: z.string().optional(),
+  error: z.string().optional(),
+  automation: z.looseObject({ topic: z.string(), theme: z.string().optional(), sources: z.array(sourceSchema) }).optional(),
+}) satisfies z.ZodType<QueuedPost>;
 
 // Queued or on its way to LinkedIn: the post may still go out.
 export function isLive(post: QueuedPost) {
@@ -54,8 +77,15 @@ const queueKey = "postpilot:posts";
 // toward Upstash's request limit. LinkedIn itself is the archive of what went out.
 const retainedTerminalPosts = 200;
 
+// Every change is written from what this returns, so a post it cannot read stops the
+// read with an error rather than being dropped or rewritten by the next write.
 function parsePosts(raw: string | null): QueuedPost[] {
-  return raw ? JSON.parse(raw) as QueuedPost[] : [];
+  if (!raw) return [];
+  const result = z.array(postSchema).safeParse(JSON.parse(raw));
+  if (!result.success) {
+    throw new Error(`${queueKey} holds a post this version cannot read, so nothing was changed:\n${z.prettifyError(result.error)}`);
+  }
+  return result.data;
 }
 
 export async function listPosts(deps: PostStoreDeps = {}): Promise<QueuedPost[]> {
