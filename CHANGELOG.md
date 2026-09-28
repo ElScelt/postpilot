@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-09-28
+
 ### Added
 
 - `evidence.primaryDomains` and `evidence.credibleDomains` in `postpilot.config.ts` add to the built-in source lists, so themes outside web development can clear the evidence bar with their own vendors' announcements. The README's Go example adds `go.dev`.
@@ -108,7 +110,8 @@ First public release.
   - the review pass drops a cited source that reports a different story, and declines the post when the remaining sources cannot clear the evidence bar;
   - account, sign-in and status portals under a vendor domain (such as `myaccount.microsoft.com`) never count as sources.
 
-[Unreleased]: https://github.com/ElScelt/postpilot/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/ElScelt/postpilot/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/ElScelt/postpilot/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/ElScelt/postpilot/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/ElScelt/postpilot/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/ElScelt/postpilot/releases/tag/v1.0.0
