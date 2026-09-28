@@ -1,11 +1,22 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { focusEvidence, meetsEvidenceBar, sourceTier } from "../src/lib/research/sources";
+import { evidenceDomains, focusEvidence, meetsEvidenceBar, sourceTier } from "../src/lib/research/sources";
 
 test("classifies first-party announcements as primary", () => {
   assert.equal(sourceTier("https://ai.meta.com/blog/introducing-muse-spark-meta-model-api"), "primary");
   assert.equal(sourceTier("https://openai.com/index/frontier"), "primary");
   assert.equal(sourceTier("https://nextjs.org/blog/next-16-3"), "primary");
+});
+
+test("configured domains extend the built-in lists", () => {
+  const go = { primaryDomains: ["go.dev"], credibleDomains: ["golangweekly.com"] };
+  assert.equal(sourceTier("https://go.dev/blog/go1.26"), "unrated");
+  assert.equal(sourceTier("https://go.dev/blog/go1.26", go), "primary");
+  assert.equal(sourceTier("https://nextjs.org/blog/next-16-3", go), "primary", "the built-in domains still count");
+  assert.equal(meetsEvidenceBar(["https://go.dev/blog/go1.26"], go), true);
+  assert.equal(meetsEvidenceBar(["https://golangweekly.com/issues/600", "https://www.infoq.com/news/go"], go), true);
+  assert.ok(evidenceDomains(go).includes("go.dev"));
+  assert.ok(!evidenceDomains().includes("go.dev"));
 });
 
 test("classifies established press as credible", () => {

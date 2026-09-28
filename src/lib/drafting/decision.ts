@@ -2,7 +2,8 @@ import { z } from "zod";
 import type { Draft, ResearchSource } from "./types";
 import { GroqInvalidJsonError } from "./groq";
 import type { ResearchResult } from "../research/tavily";
-import { normalizeUrl, sourceTier } from "../research/sources";
+import { normalizeUrl, sourceTier, type EvidenceSettings } from "../research/sources";
+import { config, type Config } from "../config";
 import { isPostTheme, type PostTheme } from "../research/themes";
 
 export type DraftDecision =
@@ -13,7 +14,9 @@ const responseSchema = z.object({
   shouldPost: z.boolean(),
   reason: z.string(),
   topic: z.string(),
-  theme: z.string().refine((value) => isPostTheme(value), "theme is not one of the configured themes"),
+  // Checked against the run's themes in parseDraftDecision; the strict response format
+  // already limits it to them.
+  theme: z.string(),
   paragraphs: z.object({
     hook: z.string(),
     context: z.string(),
@@ -28,14 +31,17 @@ const responseSchema = z.object({
 
 const maxSources = 3;
 
-export function parseDraftDecision(text: string, results: ResearchResult[]): DraftDecision {
+export function parseDraftDecision(
+  text: string, results: ResearchResult[], { themes, evidence: domains }: Pick<Config, "themes" | "evidence"> = config(),
+): DraftDecision {
   const cleaned = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
   const parsed = responseSchema.parse(JSON.parse(cleaned));
+  if (!isPostTheme(parsed.theme, themes)) throw new Error(`theme "${parsed.theme}" is not one of the configured themes`);
   if (!parsed.shouldPost) return { shouldPost: false, reason: parsed.reason };
   const evidence = new Map(results.map((result) => [looseUrlKey(result.url), result]));
   // The same article cited twice is one source, not two.
   const uniqueUrls = [...new Map(parsed.sourceUrls.map((url) => [looseUrlKey(url), url])).values()];
-  const sources = uniqueUrls.slice(0, maxSources).map((url) => sourceFromResult(url, evidence));
+  const sources = uniqueUrls.slice(0, maxSources).map((url) => sourceFromResult(url, evidence, domains));
   return {
     shouldPost: true,
     reason: parsed.reason,
@@ -134,10 +140,10 @@ export function looseUrlKey(url: string) {
   return `${host}${parsed.pathname.replace(/\/$/, "")}${query ? `?${query}` : ""}`;
 }
 
-function sourceFromResult(url: string, evidence: Map<string, ResearchResult>): ResearchSource {
+function sourceFromResult(url: string, evidence: Map<string, ResearchResult>, domains: EvidenceSettings): ResearchSource {
   const result = evidence.get(looseUrlKey(url));
   if (!result) throw new Error(`Source URL was not present in the evidence: ${url}. Copy sourceUrls exactly from the evidence.`);
-  const tier = sourceTier(result.url);
+  const tier = sourceTier(result.url, domains);
   return {
     title: result.title,
     url: result.url,

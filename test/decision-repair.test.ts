@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { draftJsonProblem, repairDraftJson } from "../src/lib/drafting/decision";
+import { draftJsonProblem, parseDraftDecision, repairDraftJson } from "../src/lib/drafting/decision";
 import { themeIds } from "../src/lib/research/themes";
 
 const paragraphs = { hook: "Hook.", context: "Context.", insight: "Insight.", takeaway: "Takeaway.", question: "Question?" };
@@ -27,7 +27,12 @@ test("nothing is guessed: ambiguous, well-formed or unparseable answers are not 
   assert.equal(repairDraftJson(answer({ paragraphs: { ...paragraphs, hook: { context: "One.", insight: "Two." } } })), undefined);
   assert.equal(repairDraftJson(answer({})), undefined);
   assert.equal(repairDraftJson("{\"shouldPost\": tru"), undefined);
-  assert.equal(repairDraftJson(answer({ theme: "not-a-theme", paragraphs: { ...paragraphs, hook: { hook: "Hook." } } })), undefined);
+});
+
+test("a repaired answer is still held to the configured themes", () => {
+  const repaired = repairDraftJson(answer({ theme: "not-a-theme", paragraphs: { ...paragraphs, hook: { hook: "Hook." } } }));
+  assert.ok(repaired, "the repair only fixes the shape");
+  assert.throws(() => parseDraftDecision(repaired, []), /not one of the configured themes/);
 });
 
 test("the correction names what was wrong with the answer", () => {

@@ -158,7 +158,7 @@ test("the search window is the source window it is given", async () => {
   await searchThemeEvidence("ai-integration", new Date("2026-07-14T12:00:00Z"), async (_input, init) => {
     bodies.push(JSON.parse(String(init?.body)));
     return Response.json({ results: [] });
-  }, { limits: { ...config().limits, sourceWindowDays: 3 } });
+  }, { ...config(), limits: { ...config().limits, sourceWindowDays: 3 } });
   assert.ok(bodies.length > 0);
   for (const body of bodies) assert.equal(body.start_date, "2026-07-11");
 });

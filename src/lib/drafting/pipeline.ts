@@ -1,15 +1,15 @@
 import { draftViolations } from "./rules";
-import type { DraftContext } from "./types";
+import type { DraftContext, DraftRun, DraftSettings } from "./types";
 import { draftJsonProblem, parseDraftDecision, repairedAnswer, type DraftDecision } from "./decision";
 import { completeGroq, GroqInvalidJsonError, GroqRequestTooLargeError } from "./groq";
 import { buildDraftRequest, type RecentActivity } from "./prompt";
 import { reviewDraft } from "./review";
 import { searchThemeEvidence, type ResearchResult } from "../research/tavily";
 import { focusEvidence, meetsEvidenceBar } from "../research/sources";
-import { themeOrder, type PostTheme } from "../research/themes";
+import { themeIds, themeOrder, type PostTheme } from "../research/themes";
+import { config } from "../config";
 import { errorMessage } from "../errors";
 import { runTimeLimitSeconds } from "../limits";
-import { sleep } from "../async";
 
 export type DraftAttempt = { text: string; reason: string };
 
@@ -47,6 +47,7 @@ export type DraftOptions = {
   deadline?: number;
   // How many themes may be drafted, not merely searched, in one run.
   maxThemesDrafted?: number;
+  settings?: DraftSettings;
 };
 
 const maxAttempts = 2;
@@ -79,7 +80,8 @@ function withDeadline(fetcher: typeof fetch, deadline: number): typeof fetch {
 export async function generateGroundedDraft(recent: RecentActivity, options: DraftOptions = {}): Promise<DraftOutcome> {
   const now = options.now ?? new Date();
   const deadline = options.deadline ?? Date.now() + draftingBudgetMs;
-  const bounded = withDeadline(options.fetcher ?? fetch, deadline);
+  const settings = options.settings ?? config();
+  const run: DraftRun = { now, deadline, settings, fetcher: withDeadline(options.fetcher ?? fetch, deadline) };
   const maxThemes = options.maxThemesDrafted ?? defaultMaxThemesDrafted;
   const themesTried: PostTheme[] = [];
   const evidenceHosts: Record<string, string[]> = {};
@@ -89,17 +91,17 @@ export async function generateGroundedDraft(recent: RecentActivity, options: Dra
   let rejected: { reason: string; theme: PostTheme } | undefined;
   let drafted = 0;
   let lastTheme: PostTheme | undefined;
-  for (const theme of themeOrder(recent.themes, now)) {
+  for (const theme of themeOrder(recent.themes, now, themeIds(settings.themes))) {
     if (drafted > 0 && (drafted >= maxThemes || Date.now() > deadline - minimumThemeMs)) break;
     themesTried.push(theme);
-    const results = await searchThemeEvidence(theme, now, bounded);
+    const results = await searchThemeEvidence(theme, now, run.fetcher, settings);
     evidenceHosts[theme] = [...new Set(results.map((result) => new URL(result.url).hostname))];
     if (!results.length) continue;
     lastTheme = theme;
     // If the whole evidence set cannot clear the bar, no draft drawn from it can either.
-    if (!meetsEvidenceBar(results.map((result) => result.url))) continue;
+    if (!meetsEvidenceBar(results.map((result) => result.url), settings.evidence)) continue;
     drafted += 1;
-    const outcome = await draftFromTheme(recent, results, theme, now, bounded, deadline);
+    const outcome = await draftFromTheme(recent, results, theme, run);
     attempts.push(...outcome.attempts);
     notes.push(...outcome.notes);
     if (outcome.decision.shouldPost) return { decision: outcome.decision, theme, themesTried, evidenceHosts, attempts, notes };
@@ -128,11 +130,10 @@ async function draftFromTheme(
   recent: RecentActivity,
   results: ResearchResult[],
   theme: PostTheme,
-  now: Date,
-  fetcher: typeof fetch,
-  deadline: number,
+  run: DraftRun,
 ): Promise<ThemeOutcome> {
-  const focused = focusEvidence(results);
+  const { now, settings } = run;
+  const focused = focusEvidence(results, settings.evidence);
   const evidence = focused.map((result) =>
     [result.title, result.url, result.publishedDate, result.content].join("\n"));
   const context: DraftContext = {
@@ -146,7 +147,7 @@ async function draftFromTheme(
   let form: RequestForm = { compact: false, reasoning: "medium" };
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const answer = await requestDraft(
-      (request) => buildDraftRequest({ recent, results: focused, now, theme, feedback, failedDraft, ...request }), form, fetcher, deadline,
+      (request) => buildDraftRequest({ recent, results: focused, now, theme, feedback, failedDraft, ...request }, settings), form, run,
     );
     form = answer.form;
     if (answer.invalidJson !== undefined) {
@@ -159,7 +160,7 @@ async function draftFromTheme(
     }
     let decision: DraftDecision;
     try {
-      decision = parseDraftDecision(answer.text, focused);
+      decision = parseDraftDecision(answer.text, focused, settings);
     } catch (error) {
       // A malformed answer gets the same correction as an invalid one; it used to fail
       // the whole night before the model heard what was wrong.
@@ -171,9 +172,9 @@ async function draftFromTheme(
     if (!decision.shouldPost) return { decision, rejected: false, attempts, notes: [] };
     // The model may relabel the post; the rotation needs the theme actually researched.
     const draft = { ...decision, theme };
-    const violations = draftViolations(draft, now, context);
+    const violations = draftViolations(draft, now, context, settings);
     if (!violations.length) {
-      const review = await reviewDraft(draft, focused, now, fetcher, deadline, context);
+      const review = await reviewDraft(draft, focused, context, run);
       return { decision: review.decision, rejected: false, attempts, notes: review.note ? [review.note] : [] };
     }
     feedback = violations.join(" ");
@@ -198,12 +199,11 @@ type RequestForm = { compact: boolean; reasoning: "medium" | "low" };
 async function requestDraft(
   build: (form: RequestForm) => RequestInit,
   form: RequestForm,
-  fetcher: typeof fetch,
-  deadline: number,
+  run: DraftRun,
 ): Promise<{ form: RequestForm; text: string; invalidJson?: undefined } | { form: RequestForm; invalidJson: string }> {
   for (;;) {
     try {
-      return { form, text: await completeGroq(build(form), "draft", fetcher, sleep, deadline) };
+      return { form, text: await completeGroq(build(form), "draft", { fetcher: run.fetcher, deadline: run.deadline }) };
     } catch (error) {
       const repaired = repairedAnswer(error);
       if (repaired !== undefined) return { form, text: repaired };

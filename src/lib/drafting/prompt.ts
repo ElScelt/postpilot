@@ -2,7 +2,8 @@ import { config, type Config } from "../config";
 import { bannedQuestionOpener, freshnessWords, firstParagraph, lastParagraph, openingWords, wordTarget } from "./rules";
 import { experienceVerbs } from "./claims";
 import { groqRequest } from "./groq";
-import { sourceTier } from "../research/sources";
+import { sourceTier, type EvidenceSettings } from "../research/sources";
+import type { DraftSettings } from "./types";
 import type { ResearchResult } from "../research/tavily";
 import { themeDefinition, themeIds, type PostTheme } from "../research/themes";
 import { dayIndex } from "../scheduling/time";
@@ -71,7 +72,7 @@ export type DraftRequest = {
   compact?: boolean;
 };
 
-type PromptSettings = Pick<Config, "limits" | "persona" | "themes">;
+type PromptSettings = DraftSettings;
 
 // Reasoning and answer share this budget. 2,500 was exhausted by reasoning alone on the
 // first night it ran, and at 2,500 the review's medium reasoning used it all before the
@@ -99,10 +100,10 @@ const evidenceBudget = {
 } as const;
 const tierRank = { primary: 0, credible: 1, reference: 2, unrated: 3 } as const;
 
-export function evidenceForPrompt(results: ResearchResult[], compact = false) {
+export function evidenceForPrompt(results: ResearchResult[], compact = false, evidence: EvidenceSettings = config().evidence) {
   const budget = compact ? evidenceBudget.compact : evidenceBudget.full;
   return results
-    .map((result) => ({ result, tier: sourceTier(result.url) }))
+    .map((result) => ({ result, tier: sourceTier(result.url, evidence) }))
     .sort((a, b) => tierRank[a.tier] - tierRank[b.tier])
     .slice(0, budget.results)
     .map(({ result, tier }) => ({
@@ -172,7 +173,7 @@ function personaBrief({ role, scale, stack, avoidTopics, voice }: Config["person
 function generationPrompt({
   recent, results, now, theme, feedback = "", failedDraft = "", compact = false,
 }: DraftRequest, settings: PromptSettings) {
-  const evidence = evidenceForPrompt(results, compact);
+  const evidence = evidenceForPrompt(results, compact, settings.evidence);
   // Only the opening words of each recent post travel into the prompt, which is exactly
   // what the validator compares. Feeding whole posts is how last night's numbers and
   // phrasing leaked into tonight's draft.

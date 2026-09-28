@@ -162,8 +162,9 @@ test("retries a temporary Groq rate limit using Retry-After", async () => {
       ? new Response("rate limited", { status: 429, headers: { "Retry-After": "8.508" } })
       : new Response("ok");
   };
-  const response = await requestGroq({}, fetcher, async (milliseconds: number) => {
-    waits.push(milliseconds);
+  const response = await requestGroq({}, {
+    fetcher,
+    wait: async (milliseconds: number) => { waits.push(milliseconds); },
   });
   assert.equal(response.status, 200);
   assert.equal(requests, 2);
@@ -173,14 +174,13 @@ test("retries a temporary Groq rate limit using Retry-After", async () => {
 test("returns the final response after three rate-limit retries", async () => {
   let requests = 0;
   const waits: number[] = [];
-  const response = await requestGroq(
-    {},
-    async () => {
+  const response = await requestGroq({}, {
+    fetcher: async () => {
       requests += 1;
       return new Response("rate limited", { status: 429 });
     },
-    async (milliseconds: number) => { waits.push(milliseconds); },
-  );
+    wait: async (milliseconds: number) => { waits.push(milliseconds); },
+  });
   assert.equal(response.status, 429);
   assert.equal(requests, 4);
   assert.deepEqual(waits, [10_000, 20_000, 40_000]);
@@ -189,16 +189,15 @@ test("returns the final response after three rate-limit retries", async () => {
 test("a short Retry-After that keeps failing waits longer each time, about a minute in all", async () => {
   let requests = 0;
   const waits: number[] = [];
-  const response = await requestGroq(
-    {},
-    async () => {
+  const response = await requestGroq({}, {
+    fetcher: async () => {
       requests += 1;
       return requests < 4
         ? new Response("tokens per minute", { status: 429, headers: { "Retry-After": "1.4325" } })
         : new Response("ok");
     },
-    async (milliseconds: number) => { waits.push(milliseconds); },
-  );
+    wait: async (milliseconds: number) => { waits.push(milliseconds); },
+  });
   assert.equal(response.status, 200);
   assert.deepEqual(waits, [1432.5, 20_000, 40_000]);
 });
@@ -206,10 +205,13 @@ test("a short Retry-After that keeps failing waits longer each time, about a min
 test("does not wait for a daily rate limit to reset", async () => {
   let requests = 0;
   await assert.rejects(
-    () => requestGroq({}, async () => {
-      requests += 1;
-      return new Response("tokens per day exhausted", { status: 429, headers: { "Retry-After": "3600" } });
-    }, async () => undefined),
+    () => requestGroq({}, {
+      fetcher: async () => {
+        requests += 1;
+        return new Response("tokens per day exhausted", { status: 429, headers: { "Retry-After": "3600" } });
+      },
+      wait: async () => undefined,
+    }),
     /Retry-After is 3600 seconds/,
   );
   assert.equal(requests, 1);
@@ -217,24 +219,24 @@ test("does not wait for a daily rate limit to reset", async () => {
 
 test("a completion cut off by the token budget is refused before parsing", async () => {
   await assert.rejects(
-    () => completeGroq({}, "draft", async () => Response.json({
-      choices: [{ message: { content: '{"shouldPost": tr' }, finish_reason: "length" }],
-    })),
+    () => completeGroq({}, "draft", {
+      fetcher: async () => Response.json({ choices: [{ message: { content: '{"shouldPost": tr' }, finish_reason: "length" }] }),
+    }),
     /exceeded max_completion_tokens/,
   );
 });
 
 test("an oversized request is explained rather than retried", async () => {
   await assert.rejects(
-    () => completeGroq({}, "draft", async () => new Response("Request too large", { status: 413 })),
+    () => completeGroq({}, "draft", { fetcher: async () => new Response("Request too large", { status: 413 }) }),
     /too large for the model's per-minute token limit/,
   );
 });
 
 test("returns the completion text", async () => {
-  const text = await completeGroq({}, "draft", async () => Response.json({
-    choices: [{ message: { content: "{}" }, finish_reason: "stop" }],
-  }));
+  const text = await completeGroq({}, "draft", {
+    fetcher: async () => Response.json({ choices: [{ message: { content: "{}" }, finish_reason: "stop" }] }),
+  });
   assert.equal(text, "{}");
 });
 
@@ -311,11 +313,11 @@ test("a strict-JSON validation failure is reported with whatever the model produ
   const body = { error: { message: "Failed to validate JSON.", type: "invalid_request_error", code: "json_validate_failed", failed_generation: "{\"shouldPost\": tru" } };
   const fetcher = async () => new Response(JSON.stringify(body), { status: 400 });
   await assert.rejects(
-    () => completeGroq({}, "draft", fetcher),
+    () => completeGroq({}, "draft", { fetcher }),
     (error: unknown) => error instanceof GroqInvalidJsonError && error.failedGeneration === "{\"shouldPost\": tru" && /could not validate the draft/.test(error.message),
   );
   const empty = async () => new Response(JSON.stringify({ error: { ...body.error, failed_generation: "" } }), { status: 400 });
-  await assert.rejects(() => completeGroq({}, "draft", empty), /produced no answer/);
+  await assert.rejects(() => completeGroq({}, "draft", { fetcher: empty }), /produced no answer/);
 });
 
 test("the hard rules follow the configured persona and limits", () => {
@@ -345,6 +347,7 @@ test("the draft prompt is written for the persona and limits it is given", () =>
   const request = buildDraftRequest(
     { recent: noRecent, results: [{ ...source, content: "Evidence" }], now, theme: "ai-integration" },
     {
+      ...settings,
       limits: { ...settings.limits, minWords: 100, maxWords: 180 },
       persona: { ...settings.persona, stack: ["Go", "Postgres"] },
       themes: { "ai-integration": { ...settings.themes["ai-integration"]!, brief: "Only the Go services." } },
@@ -360,11 +363,14 @@ test("the draft prompt is written for the persona and limits it is given", () =>
 test("every Groq request, retries included, can be abandoned when Groq hangs", async () => {
   const signals: unknown[] = [];
   let calls = 0;
-  await requestGroq({ method: "POST" }, async (_input, init) => {
-    signals.push(init?.signal);
-    calls += 1;
-    return calls === 1 ? new Response("slow down", { status: 429, headers: { "retry-after": "1" } }) : new Response("{}");
-  }, async () => {});
+  await requestGroq({ method: "POST" }, {
+    fetcher: async (_input, init) => {
+      signals.push(init?.signal);
+      calls += 1;
+      return calls === 1 ? new Response("slow down", { status: 429, headers: { "retry-after": "1" } }) : new Response("{}");
+    },
+    wait: async () => {},
+  });
   assert.equal(signals.length, 2);
   assert.ok(signals.every((signal) => signal instanceof AbortSignal));
 });
@@ -372,12 +378,11 @@ test("every Groq request, retries included, can be abandoned when Groq hangs", a
 test("never waits out a rate limit past the run's deadline", async () => {
   const waits: number[] = [];
   await assert.rejects(
-    () => requestGroq(
-      {},
-      async () => new Response("rate limited", { status: 429, headers: { "Retry-After": "20" } }),
-      async (milliseconds: number) => { waits.push(milliseconds); },
-      Date.now() + 5_000,
-    ),
+    () => requestGroq({}, {
+      fetcher: async () => new Response("rate limited", { status: 429, headers: { "Retry-After": "20" } }),
+      wait: async (milliseconds: number) => { waits.push(milliseconds); },
+      deadline: Date.now() + 5_000,
+    }),
     /Out of time/,
   );
   assert.deepEqual(waits, [], "the wait would have passed the deadline, so it never started");

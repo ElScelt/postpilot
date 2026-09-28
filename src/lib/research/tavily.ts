@@ -35,31 +35,36 @@ const searchTimeoutMs = 30_000;
 // the same allowlisted domains before the search opens up to the whole web. A narrow
 // pass must never silence the automation outright, so its failure is logged and the
 // next pass runs; a genuine outage fails on the last one.
-const passes: SearchPass[] = [
-  { includeDomains: evidenceDomains, topic: "news" },
-  { includeDomains: evidenceDomains, topic: "general" },
-  { includeDomains: [], topic: "news" },
-];
+function searchPasses(evidence: Config["evidence"]): SearchPass[] {
+  const domains = evidenceDomains(evidence);
+  return [
+    { includeDomains: domains, topic: "news" },
+    { includeDomains: domains, topic: "general" },
+    { includeDomains: [], topic: "news" },
+  ];
+}
 
 export async function searchThemeEvidence(
   theme: PostTheme,
   now = new Date(),
   fetcher: typeof fetch = fetch,
-  { limits }: Pick<Config, "limits"> = config(),
+  { limits, themes, evidence }: Pick<Config, "limits" | "themes" | "evidence"> = config(),
 ) {
   const window = recentDays(now, limits.sourceWindowDays);
+  const queries = themeDefinition(theme, themes).queries;
+  const passes = searchPasses(evidence);
   const merged = new Map<string, ResearchResult>();
   for (const [index, pass] of passes.entries()) {
     let results: ResearchResult[];
     try {
-      results = await runSearches(window, fetcher, pass, theme);
+      results = await runSearches(window, fetcher, pass, queries);
     } catch (error) {
       if (index === passes.length - 1) throw error;
       console.error(`Tavily ${pass.topic} search over ${pass.includeDomains.length} domains failed:`, errorMessage(error));
       continue;
     }
     mergeByUrl(merged, results);
-    if (meetsEvidenceBar([...merged.values()].map((result) => result.url))) break;
+    if (meetsEvidenceBar([...merged.values()].map((result) => result.url), evidence)) break;
   }
   return [...merged.values()];
 }
@@ -70,11 +75,9 @@ async function runSearches(
   window: SearchWindow,
   fetcher: typeof fetch,
   pass: SearchPass,
-  theme: PostTheme,
+  queries: string[],
 ) {
-  const batches = await Promise.all(
-    themeDefinition(theme).queries.map((query) => runSearch(query, window, fetcher, pass)),
-  );
+  const batches = await Promise.all(queries.map((query) => runSearch(query, window, fetcher, pass)));
   return [...mergeByUrl(new Map(), batches.flat()).values()];
 }
 

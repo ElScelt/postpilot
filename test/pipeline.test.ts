@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { DraftRejectedError, generateGroundedDraft } from "../src/lib/drafting/pipeline";
 import { GroqRequestTooLargeError } from "../src/lib/drafting/groq";
 import { themeIds, themeDefinition, themeOrder, type PostTheme } from "../src/lib/research/themes";
+import { loadConfig } from "../src/lib/config";
 
 process.env.GROQ_API_KEY = "test-key";
 process.env.TAVILY_API_KEY = "test-key";
@@ -150,6 +151,29 @@ test("the theme actually researched wins over the theme the model reports", asyn
 
 const decline = (theme: PostTheme, reason = "Only a rehash is possible.") =>
   decisionJson({ shouldPost: false, reason, topic: "", theme, paragraphs: { hook: "", context: "", insight: "", takeaway: "", question: "" }, sourceUrls: [] });
+
+test("drafts from the themes, queries and evidence domains it is given", async () => {
+  const settings = loadConfig({
+    themes: { go: { label: "Go", queries: ["Go release notes"], brief: "The Go toolchain." } },
+    evidence: { primaryDomains: ["go.dev"] },
+  });
+  const queries: string[] = [];
+  const prompts: string[] = [];
+  const fetcher: typeof fetch = async (input, init) => {
+    const body = JSON.parse(String(init?.body));
+    if (String(input).includes("tavily")) {
+      queries.push(body.query);
+      return Response.json({ results: [{ title: "Go 1.26", url: "https://go.dev/blog/go1.26", content: "Release.", published_date: "2026-09-04T09:00:00Z" }] });
+    }
+    prompts.push(body.messages[0].content);
+    return groqPayload(decline("go" as PostTheme));
+  };
+  const outcome = await generateGroundedDraft(noRecent, { now, fetcher, settings });
+  assert.deepEqual(outcome.themesTried, ["go"]);
+  assert.deepEqual([...new Set(queries)], ["Go release notes"]);
+  assert.equal(prompts.length, 1, "go.dev cleared the evidence bar, so the theme was drafted");
+  assert.match(prompts[0]!, /Tonight's theme is Go: The Go toolchain\./);
+});
 
 test("a theme the model declines is followed by the next theme with evidence", async () => {
   const { fetcher, groqBodies } = fakeFetch(() => [primary], [decline(firstTheme), decisionJson({ theme: secondTheme })]);

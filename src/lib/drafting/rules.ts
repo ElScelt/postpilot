@@ -4,7 +4,7 @@ import { recentDays } from "../scheduling/time";
 import { maxPostLength } from "../limits";
 import { experienceClaim, inventedHistory } from "./claims";
 import { spelledNumbers, unsupportedNumbers } from "./numbers";
-import type { Draft, DraftContext, ResearchSource } from "./types";
+import type { Draft, DraftContext, DraftSettings, ResearchSource } from "./types";
 
 // The word lists and phrases are exported so the prompt quotes exactly what the
 // validator enforces; two hand-kept copies drifted apart before.
@@ -56,7 +56,7 @@ const academicCitation = new RegExp(
 // and scoped package names such as @tanstack/react-query are everyday vocabulary here.
 const linkOrEmail = /https?:\/\/|\bwww\.|[\w.+-]+@[\w-]+\.[a-z]{2,}/i;
 
-type RuleSettings = Pick<Config, "limits" | "persona" | "themes">;
+type RuleSettings = DraftSettings;
 
 function escapeRegExp(text: string) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -156,7 +156,7 @@ const checks: Check[] = [
     const invented = context.evidence ? unsupportedNumbers(text, context.evidence) : [];
     return invented.length ? `Draft contains numbers absent from the evidence (${invented.join(", ")}); use only figures the sources state.` : undefined;
   },
-  ({ draft, now, limits }) => sourceViolations(draft.sources, now, limits.sourceWindowDays),
+  ({ draft, now, limits, evidence }) => sourceViolations(draft.sources, now, limits.sourceWindowDays, evidence),
 ];
 
 // Every rule is checked and every violation reported, so the one corrective attempt the
@@ -165,10 +165,10 @@ export function draftViolations(
   draft: Draft,
   now = new Date(),
   context: DraftContext = {},
-  { limits, persona, themes }: RuleSettings = config(),
+  { limits, persona, themes, evidence }: RuleSettings = config(),
 ) {
   const text = draft.text.trim();
-  const parts: DraftParts = { draft, text, hook: firstParagraph(text), question: lastParagraph(text), now, context, limits, persona, themes };
+  const parts: DraftParts = { draft, text, hook: firstParagraph(text), question: lastParagraph(text), now, context, limits, persona, themes, evidence };
   return checks.flatMap((check) => check(parts) ?? []);
 }
 
@@ -243,8 +243,8 @@ export function openingWords(text: string, count: number) {
 
 // Judged by calendar day, so a source from the first day of the window is not rejected
 // merely because the run started late in the evening.
-function sourceViolations(sources: ResearchSource[], now: Date, windowDays: number) {
-  if (!sources.length || !meetsEvidenceBar(sources.map((source) => source.url))) {
+function sourceViolations(sources: ResearchSource[], now: Date, windowDays: number, evidence: DraftSettings["evidence"]) {
+  if (!sources.length || !meetsEvidenceBar(sources.map((source) => source.url), evidence)) {
     return ["Draft needs one first-party source or two credible sources from different publishers."];
   }
   const violations: string[] = [];

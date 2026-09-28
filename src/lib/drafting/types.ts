@@ -1,3 +1,19 @@
+import type { Config } from "../config";
+
+// The settings drafting reads. The run passes them down; only the entry points fall back
+// to config().
+export type DraftSettings = Pick<Config, "limits" | "persona" | "themes" | "evidence">;
+
+// What every request of one night shares.
+export type DraftRun = {
+  now: Date;
+  // Every Tavily and Groq request goes through this; it ends each one at the deadline.
+  fetcher: typeof fetch;
+  // Wall-clock limit for the whole night, as an epoch millisecond.
+  deadline: number;
+  settings: DraftSettings;
+};
+
 export type ResearchSource = {
   title: string;
   url: string;

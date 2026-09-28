@@ -128,6 +128,8 @@ const config: PostpilotConfig = {
       brief: "Postgres features, performance and operational changes for an application team.",
     },
   },
+  // Go's own release notes live on go.dev, which the built-in list does not know.
+  evidence: { primaryDomains: ["go.dev"] },
 };
 
 export default config;
@@ -147,9 +149,11 @@ export default config;
 | `limits.minWords` / `limits.maxWords` | `140` / `220` | Word range for the post. `minWords` must be below `maxWords`. |
 | `limits.maxHookLength` | `160` | Maximum characters in the first paragraph (40 or more). The prompt aims for about three quarters of this. |
 | `limits.sourceWindowDays` | `14` | How old a source may be, in calendar days (1–30). Applies to search and validation. |
-| `themes` | six web-development themes | Map of theme id (lowercase words joined by hyphens) to `{ label, queries, brief }`. `queries` are natural-language Tavily searches; `brief` tells the model what the theme covers. Setting `themes` replaces the defaults entirely. |
+| `themes` | six web-development themes | Map of theme id (lowercase words joined by hyphens) to `{ label, queries, brief }`. `queries` are natural-language Tavily searches; `brief` tells the model what the theme covers. Setting `themes` replaces the defaults entirely. With a single theme, posts may repeat it; with several, no two posts in a row share one. |
+| `evidence.primaryDomains` | `[]` | Domains whose pages count as first-party sources, added to the built-in list: the vendors behind your themes, for example `["go.dev"]`. One dated page from them clears the evidence bar. Subdomains count too. |
+| `evidence.credibleDomains` | `[]` | Publications added to the built-in list of credible press. Two of them, from different publishers, clear the evidence bar. |
 
-The default themes are Frontend, Backend, AI inside web apps, Testing and CI, Data and storage, and Deploy and platform; their queries are in [src/lib/config/defaults.ts](src/lib/config/defaults.ts). The domains that count as first-party or credible sources are in [src/lib/research/sources.ts](src/lib/research/sources.ts).
+The default themes are Frontend, Backend, AI inside web apps, Testing and CI, Data and storage, and Deploy and platform; their queries are in [src/lib/config/defaults.ts](src/lib/config/defaults.ts). The built-in domains that count as first-party or credible sources are in [src/lib/research/sources.ts](src/lib/research/sources.ts); they cover web development and AI vendors. If your themes are about something else, add its vendors under `evidence`, or no night will find a source that clears the bar.
 
 ### Environment variables
 

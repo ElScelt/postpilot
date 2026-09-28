@@ -1,4 +1,8 @@
+import { config, type Config } from "../config";
+
 export type SourceTier = "primary" | "credible" | "reference" | "unrated";
+
+export type EvidenceSettings = Config["evidence"];
 
 // First-party announcements and research: the vendor or lab making the claim. Hosts
 // where anyone can publish (github.com repositories, huggingface.co model cards,
@@ -35,9 +39,19 @@ const credibleDomains = [
   "github.com", "huggingface.co", "arxiv.org",
 ];
 
+function primary(evidence: EvidenceSettings) {
+  return [...primaryDomains, ...evidence.primaryDomains];
+}
+
+function credible(evidence: EvidenceSettings) {
+  return [...credibleDomains, ...evidence.credibleDomains];
+}
+
 // Every domain that can contribute to the evidence bar. Searching these first keeps
 // the research aligned with the standard the draft is later judged against.
-export const evidenceDomains = [...primaryDomains, ...credibleDomains];
+export function evidenceDomains(evidence: EvidenceSettings = config().evidence) {
+  return [...new Set([...primary(evidence), ...credible(evidence)])];
+}
 
 function matchedDomain(host: string, domains: string[]) {
   return domains.find((domain) => host === domain || host.endsWith(`.${domain}`));
@@ -89,11 +103,11 @@ function isReferencePage(url: string) {
   return segments.some((segment) => referenceSegments.has(segment));
 }
 
-export function sourceTier(url: string): SourceTier {
+export function sourceTier(url: string, evidence: EvidenceSettings = config().evidence): SourceTier {
   if (!URL.canParse(url)) return "unrated";
   const host = new URL(url).hostname.toLowerCase();
   if ([...userContentHosts, ...portalHosts].some((prefix) => host.startsWith(prefix))) return "unrated";
-  const base = matchedDomain(host, primaryDomains) ? "primary" : matchedDomain(host, credibleDomains) ? "credible" : "unrated";
+  const base = matchedDomain(host, primary(evidence)) ? "primary" : matchedDomain(host, credible(evidence)) ? "credible" : "unrated";
   if (base === "unrated") return base;
   return isReferencePage(url) ? "reference" : base;
 }
@@ -107,7 +121,7 @@ export function normalizeUrl(url: string) {
 // One first-party source, or two credible ones from different publishers. Counting
 // distinct publishers rather than distinct URLs stops a single outlet — or a single
 // article cited twice — from standing in for corroboration.
-export function meetsEvidenceBar(urls: string[]) {
+export function meetsEvidenceBar(urls: string[], evidence: EvidenceSettings = config().evidence) {
   const seen = new Set<string>();
   const publishers = new Set<string>();
   for (const url of urls) {
@@ -115,10 +129,10 @@ export function meetsEvidenceBar(urls: string[]) {
     const key = normalizeUrl(url);
     if (seen.has(key)) continue;
     seen.add(key);
-    const tier = sourceTier(url);
+    const tier = sourceTier(url, evidence);
     if (tier === "primary") return true;
     if (tier !== "credible") continue;
-    const publisher = matchedDomain(new URL(url).hostname.toLowerCase(), credibleDomains);
+    const publisher = matchedDomain(new URL(url).hostname.toLowerCase(), credible(evidence));
     if (publisher) publishers.add(publisher);
   }
   return publishers.size >= 2;
@@ -130,19 +144,20 @@ export function meetsEvidenceBar(urls: string[]) {
 // sources and the reference pages of the same publishers travel into the prompt, so a
 // docs page can add detail to its vendor's announcement but never supply a story of
 // its own, and unrated pages never reach the model at all.
-export function focusEvidence<T extends { url: string }>(results: T[]): T[] {
+export function focusEvidence<T extends { url: string }>(results: T[], evidence: EvidenceSettings = config().evidence): T[] {
+  const domains = evidenceDomains(evidence);
   const publishers = new Set<string>();
   for (const result of results) {
-    const tier = sourceTier(result.url);
+    const tier = sourceTier(result.url, evidence);
     if (tier !== "primary" && tier !== "credible") continue;
-    const publisher = matchedDomain(new URL(result.url).hostname.toLowerCase(), evidenceDomains);
+    const publisher = matchedDomain(new URL(result.url).hostname.toLowerCase(), domains);
     if (publisher) publishers.add(publisher);
   }
   return results.filter((result) => {
-    const tier = sourceTier(result.url);
+    const tier = sourceTier(result.url, evidence);
     if (tier === "primary" || tier === "credible") return true;
     if (tier !== "reference") return false;
-    const publisher = matchedDomain(new URL(result.url).hostname.toLowerCase(), evidenceDomains);
+    const publisher = matchedDomain(new URL(result.url).hostname.toLowerCase(), domains);
     return publisher !== undefined && publishers.has(publisher);
   });
 }

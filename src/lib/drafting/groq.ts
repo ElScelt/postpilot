@@ -103,12 +103,15 @@ export class GroqRateLimitError extends Error {
 
 // A wait for the rate limit that would end after `deadline` is not started: the platform
 // would kill the run mid-sleep, and the run would end without recording why.
-export async function requestGroq(
-  init: RequestInit,
-  fetcher: typeof fetch = fetch,
-  wait: (milliseconds: number) => Promise<void> = sleep,
-  deadline = Infinity,
-) {
+// How one call is made: the fetch it goes through, how it waits out a rate limit, and
+// the run's deadline, past which no wait starts.
+export type GroqCall = {
+  fetcher?: typeof fetch;
+  wait?: (milliseconds: number) => Promise<void>;
+  deadline?: number;
+};
+
+export async function requestGroq(init: RequestInit, { fetcher = fetch, wait = sleep, deadline = Infinity }: GroqCall = {}) {
   const send = () => fetcher(groqEndpoint, { ...init, signal: AbortSignal.timeout(requestTimeoutMs) });
   let response = await send();
   for (let retry = 0; response.status === 429 && retry < minimumRetryWaitsMs.length; retry += 1) {
@@ -133,14 +136,8 @@ export async function requestGroq(
 // The text of one completion, or a descriptive error. Reasoning tokens share the
 // completion budget with the answer, so a finish_reason of "length" means the JSON was
 // cut off and must not reach the parser.
-export async function completeGroq(
-  init: RequestInit,
-  label: string,
-  fetcher: typeof fetch = fetch,
-  wait: (milliseconds: number) => Promise<void> = sleep,
-  deadline = Infinity,
-) {
-  const response = await requestGroq(init, fetcher, wait, deadline);
+export async function completeGroq(init: RequestInit, label: string, call: GroqCall = {}) {
+  const response = await requestGroq(init, call);
   if (response.status === 413) {
     throw new GroqRequestTooLargeError(`Groq refused the ${label} request as too large for the model's per-minute token limit: ${await response.text()}`);
   }

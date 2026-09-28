@@ -18,6 +18,7 @@ test("an empty configuration falls back to every default", () => {
   assert.deepEqual(settings.persona.stack, []);
   assert.equal(settings.persona.voice, "");
   assert.deepEqual(Object.keys(settings.themes), ["frontend", "backend", "ai-integration", "testing", "data", "platform"]);
+  assert.deepEqual(settings.evidence, { primaryDomains: [], credibleDomains: [] });
 });
 
 test("a partial section keeps the defaults for the fields it leaves out", () => {
@@ -43,6 +44,8 @@ test("a mistake names the field that is wrong", () => {
     [{ themes: {} }, /at least one theme/],
     [{ themes: { "Not A Slug": { label: "x", queries: ["q"], brief: "b" } } }, /theme ids are lowercase words joined by hyphens/],
     [{ timezone: "UTC" }, /Unrecognized key/],
+    [{ evidence: { primaryDomains: ["https://go.dev"] } }, /evidence\.primaryDomains/],
+    [{ evidence: { domains: ["go.dev"] } }, /Unrecognized key/],
   ];
   for (const [input, message] of cases) {
     assert.throws(() => loadConfig(input), message, JSON.stringify(input));

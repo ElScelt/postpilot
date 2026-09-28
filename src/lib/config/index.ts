@@ -25,6 +25,8 @@ const themeSchema = z.strictObject({
   brief: z.string().min(1),
 });
 
+const domain = z.string().regex(/^[a-z0-9-]+(\.[a-z0-9-]+)+$/, "a bare domain in lowercase, such as go.dev");
+
 const configSchema = z.strictObject({
   timeZone: z.string().refine(isTimeZone, "must be an IANA time zone such as UTC or Europe/Tallinn").default("UTC"),
   publishHour: hour.default(9),
@@ -49,6 +51,13 @@ const configSchema = z.strictObject({
     .refine((themes) => Object.keys(themes).length > 0, "at least one theme is required")
     .refine((themes) => Object.keys(themes).every((id) => /^[a-z0-9-]+$/.test(id)), "theme ids are lowercase words joined by hyphens")
     .default(defaultThemes),
+  // Added to the built-in lists in src/lib/research/sources.ts, never replacing them, so
+  // a theme outside web development can clear the evidence bar with its own vendor's
+  // announcements. A subdomain counts with its domain.
+  evidence: z.strictObject({
+    primaryDomains: z.array(domain).default([]),
+    credibleDomains: z.array(domain).default([]),
+  }).prefault({}),
 });
 
 // What postpilot.config.ts may contain: every field is optional.
