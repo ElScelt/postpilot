@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-09-28
+
 ### Changed
 
 - A run stopped by a missing or expired LinkedIn authorization has a status of its own, `stopped`, and reports a failure to the healthcheck instead of a healthy night. A crash reports a failure only on QStash's last retry, so a failure that will be retried no longer pages you. The README now suggests a 45-minute grace period for the check, since the last retry comes about half an hour after the first delivery.
@@ -88,6 +90,7 @@ First public release.
   - the review pass drops a cited source that reports a different story, and declines the post when the remaining sources cannot clear the evidence bar;
   - account, sign-in and status portals under a vendor domain (such as `myaccount.microsoft.com`) never count as sources.
 
-[Unreleased]: https://github.com/ElScelt/postpilot/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/ElScelt/postpilot/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/ElScelt/postpilot/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/ElScelt/postpilot/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/ElScelt/postpilot/releases/tag/v1.0.0
